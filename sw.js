@@ -1,11 +1,15 @@
 /* MeetNote Service Worker — 바닐라(워크박스 없음).
-   전략: 앱 셸 precache + 캐시 우선, 구글폰트 stale-while-revalidate,
-        Tesseract(OCR, 대용량·온라인 전용)는 캐시하지 않음.
-   업데이트: B방식(무음) — install에서 skipWaiting을 호출하지 않아
-            새 SW는 대기하다가 다음 실행 때 자연 활성화된다. */
-const VERSION = "v1";
+   전략:
+   - HTML 셸(네비게이션·*.html·"/") : 네트워크 우선 → 온라인이면 항상 최신, 오프라인이면 캐시.
+     (캐시 우선으로 두면 VERSION을 올리기 전까지 옛 HTML이 영구히 제공되는 함정이 있어 네트워크 우선으로 둠.)
+   - 정적 자산(아이콘·매니페스트 등)        : 캐시 우선(불변).
+   - 구글폰트                              : stale-while-revalidate(불투명 응답 미캐싱 + 용량 cap).
+   - Tesseract(OCR, 대용량·온라인 전용)     : 가로채지 않음(네트워크 직행).
+   업데이트: B방식(무음) — install에서 skipWaiting을 호출하지 않아 새 SW는 대기하다 다음 실행 때 활성화. */
+const VERSION = "v2";
 const SHELL_CACHE = "meetnote-shell-" + VERSION;
 const FONT_CACHE = "meetnote-fonts";
+const FONT_MAX = 60;
 const SHELL = [
   "./", "./index.html", "./meetnote.html", "./manifest.webmanifest",
   "./assets/icon.svg", "./assets/icon-192.png", "./assets/icon-512.png",
@@ -35,18 +39,35 @@ self.addEventListener("fetch", (e) => {
   // Tesseract OCR 엔진(수~십 MB, 온라인 전용) — 캐시하지 않고 네트워크 직행
   if (url.hostname === "cdn.jsdelivr.net") return;
 
-  // 구글폰트 — stale-while-revalidate (첫 로드 후 오프라인에서도 글꼴 유지)
+  // 구글폰트 — stale-while-revalidate
   if (url.hostname === "fonts.googleapis.com" || url.hostname === "fonts.gstatic.com") {
     e.respondWith(staleWhileRevalidate(req, FONT_CACHE));
     return;
   }
 
-  // 같은 오리진 — 캐시 우선(앱 셸), 오프라인 네비게이션 폴백 포함
   if (url.origin === self.location.origin) {
-    e.respondWith(cacheFirst(req));
+    if (req.mode === "navigate" || url.pathname.endsWith(".html") || url.pathname.endsWith("/")) {
+      e.respondWith(networkFirst(req));   // HTML 셸 — 네트워크 우선
+    } else {
+      e.respondWith(cacheFirst(req));     // 정적 자산 — 캐시 우선
+    }
   }
   // 그 외 — 기본 네트워크 처리(가로채지 않음)
 });
+
+async function networkFirst(req) {
+  const cache = await caches.open(SHELL_CACHE);
+  try {
+    const res = await fetch(req);
+    if (res && res.ok && res.type === "basic") cache.put(req, res.clone());
+    return res;
+  } catch (err) {
+    const hit = await cache.match(req, { ignoreSearch: true });
+    if (hit) return hit;
+    if (req.mode === "navigate") return (await cache.match("./meetnote.html")) || Response.error();
+    return Response.error();
+  }
+}
 
 async function cacheFirst(req) {
   const cache = await caches.open(SHELL_CACHE);
@@ -57,11 +78,6 @@ async function cacheFirst(req) {
     if (res && res.ok && res.type === "basic") cache.put(req, res.clone());
     return res;
   } catch (err) {
-    if (req.mode === "navigate") {
-      return (await cache.match("./meetnote.html")) ||
-             (await cache.match("./index.html")) ||
-             Response.error();
-    }
     return Response.error();
   }
 }
@@ -70,8 +86,14 @@ async function staleWhileRevalidate(req, cacheName) {
   const cache = await caches.open(cacheName);
   const hit = await cache.match(req);
   const fetching = fetch(req).then((res) => {
-    if (res && (res.ok || res.type === "opaque")) cache.put(req, res.clone());
+    // 불투명(no-cors) 응답은 캐시하지 않음 — 할당량 과다 점유 방지
+    if (res && res.ok) { cache.put(req, res.clone()).then(() => trimCache(cache, FONT_MAX)); }
     return res;
   }).catch(() => null);
   return hit || (await fetching) || Response.error();
+}
+
+async function trimCache(cache, max) {
+  const keys = await cache.keys();
+  for (let i = 0; i < keys.length - max; i++) await cache.delete(keys[i]);
 }

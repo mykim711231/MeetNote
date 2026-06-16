@@ -1076,7 +1076,8 @@ function stopRec(){
 $("#recBtn").onclick=()=>recognizing?stopRec():startRec();
 $("#clearBtn").onclick=()=>{
   if(segments.length && !confirm("현재 받아쓴 내용을 모두 지울까요?"))return;
-  loadedMeetingId=null; baseElapsed=0;
+  if(recognizing)stopRec();   // 녹음 중이면 먼저 정지 — 안 그러면 옛 startTime 기준으로 ts가 점프함
+  loadedMeetingId=null; baseElapsed=0; startTime=0;
   setMeetingType("general");
   segments=[];$("#title").value="";$("#timer").textContent="00:00";
   rerenderTranscript();$("#saveBtn").disabled=true;
@@ -1099,7 +1100,8 @@ $("#saveBtn").onclick=()=>{
     existing.duration=segments[segments.length-1].ts;
     existing.segments=JSON.parse(JSON.stringify(segments));
     existing.type=meetingType;
-    saveDB(db);updateCounts();toast("기존 회의록을 갱신했습니다");
+    if(!saveDB(db))return;   // 용량초과 시 saveDB가 토스트+false → 성공토스트 스킵
+    updateCounts();toast("기존 회의록을 갱신했습니다");
   }else{
     db.unshift({
       id:Date.now(),
@@ -1111,7 +1113,8 @@ $("#saveBtn").onclick=()=>{
       type:meetingType,
       summary:null, actions:null
     });
-    saveDB(db);updateCounts();toast("회의록을 저장했습니다");
+    if(!saveDB(db))return;
+    updateCounts();toast("회의록을 저장했습니다");
   }
 };
 
@@ -1213,11 +1216,12 @@ function renderHistory(){
 }
 function loadMeeting(m){
   segments=JSON.parse(JSON.stringify(m.segments));
-  baseElapsed=m.duration||(segments.length?segments[segments.length-1].ts:0);  // 이어 녹음 시 타임라인 연속
   $("#title").value=m.title; $("#timer").textContent=fmtT(m.duration);
   setMeetingType(m.type||"general");
   rerenderTranscript();$("#saveBtn").disabled=false;
-  $$("nav.tabs button")[0].click();
+  $$("nav.tabs button")[0].click();   // 진행 중 STT를 먼저 정지(stopRec)
+  // baseElapsed는 반드시 click() 이후에 설정 — 그래야 stopRec의 baseElapsed 누적에 오염되지 않음
+  baseElapsed=m.duration||(segments.length?segments[segments.length-1].ts:0);  // 이어 녹음 시 타임라인 연속
   loadedMeetingId=m.id;   // click()이 먼저 실행되므로 그 뒤에 설정
   toast("회의록을 불러왔습니다. 저장하면 기존 회의가 갱신됩니다");
 }
@@ -1391,7 +1395,7 @@ function buildIssues(){
   const box=$("#issueBody");
   $("#issueCard").style.display="block";
   if(!items.length){box.innerHTML='<div class="empty-hint">이슈로 보이는 발언을 찾지 못했습니다. (예: ~가 문제다, 우려, 버그, 해결해야 등)</div>';return}
-  const mid=loadedMeetingId||"cur";
+  const mid=String(loadedMeetingId||"cur").replace(/[^0-9A-Za-z_-]/g,"");  // 방어적: data-k 속성에 위험문자 유입 차단(XSS)
   box.innerHTML="";
   items.forEach(it=>{
     const key=mid+"::"+it.hash;
@@ -1490,7 +1494,7 @@ $("#expAll").onclick=()=>{const db=loadDB();if(!db.length&&!memos.length){toast(
 
 /* ============ 백업 가져오기 (import, 병합) ============ */
 function validMeeting(m){
-  return m && typeof m==="object" && typeof m.id!=="undefined"
+  return m && typeof m==="object" && typeof m.id==="number"   // id는 숫자(Date.now)만 — 문자열 id로 DOM 속성 주입(XSS) 차단
     && Array.isArray(m.segments)
     && m.segments.every(s=>s&&typeof s.who==="string"&&typeof s.text==="string"&&typeof s.ts==="number");
 }
@@ -1659,7 +1663,8 @@ $("#revSaveBtn").onclick=()=>{
   db.unshift({id:Date.now(),title:$("#title").value.trim()||"제목 없는 회의",date:new Date().toISOString(),
     duration:revSegments.length?revSegments[revSegments.length-1].audioTime*1000:0,
     segments:revSegments.map(s=>({who:s.who,text:s.text||"(메모 없음)",ts:s.audioTime*1000})),folderId:(activeFolder!=="all"&&activeFolder!=="none")?activeFolder:null,summary:null,actions:null});
-  saveDB(db);updateCounts();toast("회의록을 저장했습니다");
+  if(!saveDB(db))return;
+  updateCounts();toast("회의록을 저장했습니다");
 };
 
 $("#wakeToggle")&&($("#wakeToggle").onchange=()=>{
@@ -1839,14 +1844,14 @@ function persistMemo(){
   m.text=$("#memoText").value;m.date=new Date().toISOString();
   // 완전히 빈 메모는 자동 정리(휴지통 안 거침)
   if(!m.text.trim()){memos=memos.filter(x=>x.id!==currentMemoId)}
-  saveMemos(memos);memoCountUpd();
+  const ok=saveMemos(memos);memoCountUpd();return ok;
 }
 let memoSaveT;
 function memoAutosave(){
   $("#memoSaveState").textContent="저장 중…";
   memoCountUpdInfo();
   clearTimeout(memoSaveT);
-  memoSaveT=setTimeout(()=>{persistMemo();$("#memoSaveState").textContent="저장됨"},600);
+  memoSaveT=setTimeout(()=>{$("#memoSaveState").textContent=persistMemo()===false?"저장 실패":"저장됨"},600);
 }
 $("#memoText")&&($("#memoText").oninput=memoAutosave);
 // 서식 도구 토글(아이폰처럼 평소 숨김)
@@ -1996,7 +2001,7 @@ function loadTesseract(){
   tesseractLoading=new Promise((resolve,reject)=>{
     const s=document.createElement("script");
     s.src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js";
-    s.onload=()=>window.Tesseract?resolve(window.Tesseract):reject(new Error("load-fail"));
+    s.onload=()=>{if(window.Tesseract)resolve(window.Tesseract);else{tesseractLoading=null;reject(new Error("load-fail"))}};  // 실패 시 리셋해야 재시도 가능
     s.onerror=()=>{tesseractLoading=null;reject(new Error("network"))};
     document.head.appendChild(s);
   });
@@ -2019,8 +2024,8 @@ async function runOcr(file){
     }
     prog.textContent="글자 인식 중…";
     const url=URL.createObjectURL(file);
-    const {data}=await ocrWorker.recognize(url);
-    URL.revokeObjectURL(url);
+    let data;
+    try{({data}=await ocrWorker.recognize(url))}finally{URL.revokeObjectURL(url)}  // 예외 시에도 objectURL 회수
     const txt=(data&&data.text||"").trim();
     if(!txt){toast("이미지에서 글자를 찾지 못했습니다");prog.style.display="none";ocrBusy=false;return}
     // 커서 위치에 삽입
