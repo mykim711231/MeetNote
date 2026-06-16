@@ -6,6 +6,7 @@ import TabBar from '@/components/TabBar';
 import Toast from '@/components/Toast';
 import UpdateToast from '@/components/UpdateToast';
 import ConfirmDialog from '@/components/ConfirmDialog';
+import Onboarding from '@/components/Onboarding';
 import { RecorderProvider, useRecorderContext } from '@/components/RecorderProvider';
 import RecordView from '@/routes/RecordView';
 import LibraryView from '@/routes/LibraryView';
@@ -65,6 +66,7 @@ export default function App(): JSX.Element {
         <Toast />
         <UpdateToast />
         <ConfirmDialog />
+        <Onboarding />
       </div>
     </RecorderProvider>
   );

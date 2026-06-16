@@ -3,6 +3,7 @@ import { createRoot } from 'react-dom/client';
 import { HashRouter } from 'react-router-dom';
 import { registerSW } from 'virtual:pwa-register';
 import App from './App';
+import ErrorBoundary from '@/components/ErrorBoundary';
 import { useUpdateStore } from '@/stores/useUpdateStore';
 import './styles/tokens.css';
 import './styles/index.css';
@@ -34,8 +35,10 @@ useUpdateStore.getState().setRetryFn(() => void updateSW(true));
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    <HashRouter>
-      <App />
-    </HashRouter>
+    <ErrorBoundary>
+      <HashRouter>
+        <App />
+      </HashRouter>
+    </ErrorBoundary>
   </StrictMode>
 );

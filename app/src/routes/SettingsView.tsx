@@ -134,7 +134,15 @@ export default function SettingsView(): JSX.Element {
             {folders.map((f) => (
               <li key={f.id} className="flex items-center justify-between rounded-xl bg-surface border border-divider px-3 py-2">
                 <span className="text-sm text-fg">{f.name}</span>
-                <button type="button" onClick={() => void removeFolder(f.id)} aria-label="폴더 삭제" className="text-muted">
+                <button
+                  type="button"
+                  onClick={async () => {
+                    const ok = await confirmDialog({ message: `'${f.name}' 폴더를 삭제할까요?\n안의 회의록은 미분류로 이동합니다.`, confirmLabel: '삭제', danger: true });
+                    if (ok) void removeFolder(f.id);
+                  }}
+                  aria-label="폴더 삭제"
+                  className="text-muted"
+                >
                   <Trash2 size={16} />
                 </button>
               </li>
