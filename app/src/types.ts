@@ -18,6 +18,7 @@ export interface MeetingMeta {
   hasAudio: boolean;     // 오디오 Blob 존재 여부
   audioType: string;     // 예: "audio/webm"
   pinned?: boolean;      // 상단 고정 여부
+  note?: string;         // 자유 메모
 }
 
 /** 폴더 1개 (1단계, 중첩 없음) */

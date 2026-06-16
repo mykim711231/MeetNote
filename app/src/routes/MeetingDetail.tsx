@@ -17,7 +17,7 @@ import { fmtTime, fmtDate, fmtDuration } from '@/lib/format';
 import { speakerColor, talkShares } from '@/lib/speakers';
 import type { MeetingMeta } from '@/types';
 
-type DetailTab = 'transcript' | 'summary' | 'todos';
+type DetailTab = 'transcript' | 'summary' | 'todos' | 'note';
 const SPEEDS = [1, 1.25, 1.5, 2, 0.75];
 
 export default function MeetingDetail(): JSX.Element {
@@ -168,6 +168,13 @@ export default function MeetingDetail(): JSX.Element {
     await update(next);
   };
 
+  const onNote = async (note: string) => {
+    if (note === (meeting.note ?? '')) return;
+    const next = { ...meeting, note };
+    setMeeting(next);
+    await update(next);
+  };
+
   const patchSegment = async (i: number, patch: Partial<{ text: string; who: string }>) => {
     const segments = meeting.segments.map((s, idx) => (idx === i ? { ...s, ...patch } : s));
     const next = { ...meeting, segments };
@@ -308,13 +315,13 @@ export default function MeetingDetail(): JSX.Element {
 
       {/* 탭 */}
       <div className="flex-none px-4 pt-3">
-        <div className="grid grid-cols-3 rounded-full bg-divider/30 p-1 text-sm">
-          {([['transcript', '전문'], ['summary', '요약'], ['todos', `할 일${todos.length ? ` ${todos.length}` : ''}`]] as const).map(([key, label]) => (
+        <div className="grid grid-cols-4 rounded-full bg-divider/30 p-1 text-sm">
+          {([['transcript', '전문'], ['summary', '요약'], ['todos', `할 일${todos.length ? ` ${todos.length}` : ''}`], ['note', meeting.note ? '메모 •' : '메모']] as const).map(([key, label]) => (
             <button
               key={key}
               type="button"
               onClick={() => setTab(key)}
-              className={`py-1.5 rounded-full font-medium ${tab === key ? 'bg-surface text-primary shadow-sm' : 'text-muted'}`}
+              className={`py-1.5 rounded-full font-medium text-xs ${tab === key ? 'bg-surface text-primary shadow-sm' : 'text-muted'}`}
             >
               {label}
             </button>
@@ -398,6 +405,17 @@ export default function MeetingDetail(): JSX.Element {
                   </li>
                 ))}
               </ul>
+        )}
+
+        {tab === 'note' && (
+          <textarea
+            key={meeting.id}
+            defaultValue={meeting.note ?? ''}
+            onBlur={(e) => { void onNote(e.target.value); }}
+            placeholder="이 회의에 대한 메모를 자유롭게 적어두세요…"
+            aria-label="회의 메모"
+            className="w-full min-h-[200px] bg-transparent text-fg text-sm outline-none resize-none leading-relaxed"
+          />
         )}
       </div>
 
