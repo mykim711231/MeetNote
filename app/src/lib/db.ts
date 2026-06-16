@@ -5,7 +5,7 @@
 //   index       → number[] (회의 id 목록, 최신순)
 
 import { get, set, del, keys, createStore } from 'idb-keyval';
-import type { MeetingMeta } from '@/types';
+import type { MeetingMeta, Segment } from '@/types';
 
 const store = createStore('meetnote-db', 'kv');
 
@@ -92,6 +92,57 @@ export async function isPersisted(): Promise<boolean> {
 /** 디버그/백업용: 전체 키 수 */
 export async function allKeys(): Promise<IDBValidKey[]> {
   return keys(store);
+}
+
+// ── 녹음 크래시 복구용 드래프트 ──
+// 오디오 청크는 도착 즉시 저장(재생성 불가한 데이터 우선), 메타는 주기적 갱신.
+const DRAFT_META = 'draft:meta';
+const draftChunkPrefix = 'draftchunk:';
+
+export interface DraftMeta {
+  segments: Segment[];
+  duration: number;
+  audioType: string;
+  updatedAt: number;
+}
+
+export async function saveDraftMeta(meta: DraftMeta): Promise<void> {
+  try { await set(DRAFT_META, meta, store); } catch { /* 무시 */ }
+}
+
+export async function appendDraftChunk(seq: number, blob: Blob): Promise<void> {
+  try { await set(`${draftChunkPrefix}${seq}`, blob, store); } catch { /* 무시 */ }
+}
+
+export async function loadDraft(): Promise<{ meta: DraftMeta; audio: Blob | null } | null> {
+  const meta = await get<DraftMeta>(DRAFT_META, store);
+  if (!meta) return null;
+  const allK = await keys(store);
+  const chunkKeys = allK
+    .filter((k): k is string => typeof k === 'string' && k.startsWith(draftChunkPrefix))
+    .sort((a, b) => Number(a.slice(draftChunkPrefix.length)) - Number(b.slice(draftChunkPrefix.length)));
+  // 첫 청크(seq 0)에 컨테이너 헤더(WebM EBML / MP4 ftyp·moov)가 있어야 재생 가능.
+  // 누락 시 결합 Blob은 재생 불가하므로 오디오를 버리고 자막만 복구한다.
+  const hasHeader = chunkKeys[0] === `${draftChunkPrefix}0`;
+  let audio: Blob | null = null;
+  if (hasHeader) {
+    const parts: Blob[] = [];
+    for (const k of chunkKeys) {
+      const b = await get<Blob>(k, store);
+      if (b) parts.push(b);
+    }
+    audio = parts.length ? new Blob(parts, { type: meta.audioType || 'audio/webm' }) : null;
+  }
+  return { meta, audio };
+}
+
+export async function clearDraft(): Promise<void> {
+  const allK = await keys(store);
+  await Promise.all(
+    allK
+      .filter((k) => k === DRAFT_META || (typeof k === 'string' && k.startsWith(draftChunkPrefix)))
+      .map((k) => del(k, store).catch(() => {}))
+  );
 }
 
 /** 인덱스 정합성 복구: 메타 없는 id 제거 + 인덱스에 빠진 고아 메타 편입.

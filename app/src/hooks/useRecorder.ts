@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { Segment } from '@/types';
 import { SttController, isSttSupported } from '@/lib/stt';
+import { appendDraftChunk, saveDraftMeta, clearDraft } from '@/lib/db';
 import { useWakeLock } from './useWakeLock';
 
 export type RecState = 'idle' | 'recording' | 'paused';
@@ -55,6 +56,7 @@ export function useRecorder() {
   const runStartRef = useRef(0);    // 현재 구간 시작 시각(perf)
   const runningRef = useRef(false); // 타이머 진행 여부
   const startingRef = useRef(false); // start() 동시 호출 가드
+  const draftSeqRef = useRef(0);     // 크래시 복구용 청크 시퀀스
 
   const wakeLock = useWakeLock();
 
@@ -100,6 +102,8 @@ export function useRecorder() {
     const seg: Segment = { who: speakerRef.current, text, ts: getElapsed() };
     segmentsRef.current = [...segmentsRef.current, seg];
     setSegments(segmentsRef.current);
+    // 드래프트 메타 갱신 (크래시 복구용)
+    void saveDraftMeta({ segments: segmentsRef.current, duration: getElapsed(), audioType: mimeRef.current, updatedAt: Date.now() });
   }, [getElapsed]);
 
   const start = useCallback(async (speaker: string) => {
@@ -112,6 +116,8 @@ export function useRecorder() {
     setInterim('');
     chunksRef.current = [];
     accumRef.current = 0;
+    draftSeqRef.current = 0;
+    await clearDraft().catch(() => {}); // 이전 드래프트 제거 후 새 녹음
 
     let stream: MediaStream;
     try {
@@ -149,7 +155,12 @@ export function useRecorder() {
     try {
       const mr = mime ? new MediaRecorder(stream, { mimeType: mime }) : new MediaRecorder(stream);
       mr.ondataavailable = (ev) => {
-        if (ev.data && ev.data.size > 0) chunksRef.current.push(ev.data);
+        if (ev.data && ev.data.size > 0) {
+          chunksRef.current.push(ev.data);
+          // 크래시 복구: 청크를 도착 즉시 IndexedDB에 적재
+          void appendDraftChunk(draftSeqRef.current++, ev.data);
+          void saveDraftMeta({ segments: segmentsRef.current, duration: getElapsed(), audioType: mimeRef.current, updatedAt: Date.now() });
+        }
       };
       mr.start(1000); // 1초마다 청크 → 크래시 시 손실 최소화
       mediaRef.current = mr;
@@ -274,6 +285,7 @@ export function useRecorder() {
     teardown();
     setState('idle');
     setElapsedMs(0);
+    void clearDraft();
   }, [teardown]);
 
   // 언마운트 시 강제 정리

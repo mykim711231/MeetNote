@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { Mic, Pause, Play, Square, X, Plus, AlertTriangle } from 'lucide-react';
 import { useRecorderContext } from '@/components/RecorderProvider';
 import { useMeetingStore } from '@/stores/useMeetingStore';
-import { requestPersist } from '@/lib/db';
+import { requestPersist, clearDraft } from '@/lib/db';
 import { toast } from '@/stores/useToastStore';
 import { confirmDialog } from '@/stores/useConfirmStore';
 import { fmtTime } from '@/lib/format';
@@ -61,6 +61,7 @@ export default function RecordView(): JSX.Element {
     };
     try {
       await saveNew(meta, result.blob);
+      await clearDraft().catch(() => {});
       toast('저장되었습니다.', 'success');
       setTitle('');
       navigate(`/m/${meta.id}`);
