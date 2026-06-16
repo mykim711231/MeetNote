@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import {
   ArrowLeft, Play, Pause, Trash2, Download, FileText, FileCode,
-  FileJson, Music, Gauge,
+  FileJson, Music, Gauge, Pencil,
 } from 'lucide-react';
 import { getMeeting, getAudio } from '@/lib/db';
 import { useMeetingStore } from '@/stores/useMeetingStore';
@@ -32,6 +32,7 @@ export default function MeetingDetail(): JSX.Element {
   const [playing, setPlaying] = useState(false);
   const [curMs, setCurMs] = useState(0);
   const [speedIdx, setSpeedIdx] = useState(0);
+  const [editing, setEditing] = useState(false);
 
   const mid = Number(id);
 
@@ -118,6 +119,19 @@ export default function MeetingDetail(): JSX.Element {
 
   const onFolder = async (folderId: string | null) => {
     const next = { ...meeting, folderId };
+    setMeeting(next);
+    await update(next);
+  };
+
+  const patchSegment = async (i: number, patch: Partial<{ text: string; who: string }>) => {
+    const segments = meeting.segments.map((s, idx) => (idx === i ? { ...s, ...patch } : s));
+    const next = { ...meeting, segments };
+    setMeeting(next);
+    await update(next);
+  };
+
+  const deleteSegment = async (i: number) => {
+    const next = { ...meeting, segments: meeting.segments.filter((_, idx) => idx !== i) };
     setMeeting(next);
     await update(next);
   };
@@ -232,20 +246,51 @@ export default function MeetingDetail(): JSX.Element {
       {/* 본문 */}
       <div className="flex-1 min-h-0 overflow-y-auto px-4 py-3 space-y-2">
         {tab === 'transcript' && (
-          meeting.segments.length === 0
-            ? <p className="text-center text-muted text-sm pt-8">전사된 내용이 없습니다.</p>
-            : meeting.segments.map((s, i) => (
-              <button
-                key={i}
-                type="button"
-                onClick={() => meeting.hasAudio && seekTo(s.ts)}
-                className={`w-full text-left rounded-xl px-3 py-2 transition ${i === activeIdx ? 'bg-primary/10' : ''} ${meeting.hasAudio ? 'cursor-pointer' : 'cursor-default'}`}
-              >
-                <span className="text-primary font-semibold text-sm">{s.who} </span>
-                <span className="text-muted text-xs tabular-nums">[{fmtTime(s.ts)}]</span>
-                <div className="text-fg text-sm mt-0.5">{s.text}</div>
-              </button>
-            ))
+          meeting.segments.length === 0 ? (
+            <p className="text-center text-muted text-sm pt-8">전사된 내용이 없습니다.</p>
+          ) : (
+            <>
+              <div className="flex justify-end -mt-1">
+                <button type="button" onClick={() => setEditing((v) => !v)} className="flex items-center gap-1 text-xs font-medium text-primary px-2 py-1">
+                  <Pencil size={13} /> {editing ? '완료' : '편집'}
+                </button>
+              </div>
+              {meeting.segments.map((s, i) => (
+                editing ? (
+                  <div key={i} className="rounded-xl border border-divider px-3 py-2 space-y-1">
+                    <div className="flex items-center gap-2">
+                      <input
+                        defaultValue={s.who}
+                        onBlur={(e) => { const v = e.target.value.trim(); if (v && v !== s.who) void patchSegment(i, { who: v }); }}
+                        aria-label="발언자"
+                        className="w-24 bg-transparent text-primary font-semibold text-sm border-b border-divider outline-none"
+                      />
+                      <span className="text-muted text-xs tabular-nums flex-1">[{fmtTime(s.ts)}]</span>
+                      <button type="button" onClick={() => void deleteSegment(i)} aria-label="이 발언 삭제" className="text-accent p-1"><Trash2 size={14} /></button>
+                    </div>
+                    <textarea
+                      defaultValue={s.text}
+                      onBlur={(e) => { const v = e.target.value.trim(); if (v !== s.text) void patchSegment(i, { text: v }); }}
+                      aria-label="발언 내용"
+                      rows={2}
+                      className="w-full bg-transparent text-fg text-sm outline-none resize-y"
+                    />
+                  </div>
+                ) : (
+                  <button
+                    key={i}
+                    type="button"
+                    onClick={() => meeting.hasAudio && seekTo(s.ts)}
+                    className={`w-full text-left rounded-xl px-3 py-2 transition ${i === activeIdx ? 'bg-primary/10' : ''} ${meeting.hasAudio ? 'cursor-pointer' : 'cursor-default'}`}
+                  >
+                    <span className="text-primary font-semibold text-sm">{s.who} </span>
+                    <span className="text-muted text-xs tabular-nums">[{fmtTime(s.ts)}]</span>
+                    <div className="text-fg text-sm mt-0.5">{s.text}</div>
+                  </button>
+                )
+              ))}
+            </>
+          )
         )}
 
         {tab === 'summary' && (
