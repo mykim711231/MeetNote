@@ -5,6 +5,7 @@ import {
   saveMeeting as dbSave,
   updateMeta as dbUpdate,
   deleteMeeting as dbDelete,
+  reconcileIndex,
 } from '@/lib/db';
 
 const FOLDER_KEY = 'meetnote.folders.v1';
@@ -44,6 +45,7 @@ export const useMeetingStore = create<MeetingState>((set, get) => ({
   loaded: false,
 
   load: async () => {
+    await reconcileIndex().catch(() => {});
     const meetings = await listMeetings();
     set({ meetings, loaded: true });
   },

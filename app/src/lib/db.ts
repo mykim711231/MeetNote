@@ -93,3 +93,21 @@ export async function isPersisted(): Promise<boolean> {
 export async function allKeys(): Promise<IDBValidKey[]> {
   return keys(store);
 }
+
+/** 인덱스 정합성 복구: 메타 없는 id 제거 + 인덱스에 빠진 고아 메타 편입.
+ *  중단된 저장/크래시로 생긴 dangling을 앱 시작 시 한 번 정리한다. */
+export async function reconcileIndex(): Promise<void> {
+  const allK = await keys(store);
+  const metaIds = allK
+    .filter((k): k is string => typeof k === 'string' && k.startsWith('meta:'))
+    .map((k) => Number(k.slice(5)))
+    .filter((n) => Number.isFinite(n));
+  const idx = await getIndex();
+  const metaSet = new Set(metaIds);
+  const valid = idx.filter((id) => metaSet.has(id));
+  const known = new Set(valid);
+  const orphans = metaIds.filter((id) => !known.has(id)).sort((a, b) => b - a);
+  if (orphans.length > 0 || valid.length !== idx.length) {
+    await setIndex([...valid, ...orphans]);
+  }
+}

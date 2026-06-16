@@ -65,6 +65,32 @@ export default function MeetingDetail(): JSX.Element {
     };
   }, [meeting?.id, meeting?.hasAudio]);
 
+  // 잠금화면/데스크톱 미디어 컨트롤 (지원 브라우저만)
+  useEffect(() => {
+    if (!('mediaSession' in navigator) || !meeting?.hasAudio) return;
+    const ms = navigator.mediaSession;
+    try {
+      ms.metadata = new MediaMetadata({
+        title: meeting.title || '회의록',
+        artist: 'MeetNote',
+        album: fmtDate(meeting.date),
+        artwork: [{ src: `${import.meta.env.BASE_URL}icons/icon-512.png`, sizes: '512x512', type: 'image/png' }],
+      });
+    } catch { /* noop */ }
+    const setH = (action: MediaSessionAction, handler: MediaSessionActionHandler | null) => {
+      try { ms.setActionHandler(action, handler); } catch { /* 미지원 액션 무시 */ }
+    };
+    const a = () => audioRef.current;
+    setH('play', () => { void a()?.play(); });
+    setH('pause', () => a()?.pause());
+    setH('seekbackward', (d) => { const el = a(); if (el) el.currentTime = Math.max(0, el.currentTime - (d.seekOffset ?? 10)); });
+    setH('seekforward', (d) => { const el = a(); if (el) { const t = el.currentTime + (d.seekOffset ?? 10); el.currentTime = Number.isFinite(el.duration) ? Math.min(el.duration, t) : t; } });
+    setH('seekto', (d) => { const el = a(); if (el && d.seekTime != null) el.currentTime = d.seekTime; });
+    return () => {
+      (['play', 'pause', 'seekbackward', 'seekforward', 'seekto'] as MediaSessionAction[]).forEach((act) => setH(act, null));
+    };
+  }, [meeting?.id, meeting?.hasAudio, meeting?.title, meeting?.date]);
+
   const summary = useMemo(() => (meeting ? summarize(meeting.segments) : []), [meeting]);
   const todos = useMemo(() => (meeting ? extractTodos(meeting.segments) : []), [meeting]);
 
