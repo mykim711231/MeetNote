@@ -6,6 +6,7 @@ import { usePrefStore } from '@/stores/usePrefStore';
 import { useWakeLock } from './useWakeLock';
 
 export type RecState = 'idle' | 'recording' | 'paused';
+export type RecSource = 'mic' | 'system' | 'both';
 
 export interface RecorderResult {
   blob: Blob | null;
@@ -40,6 +41,9 @@ export function useRecorder() {
 
   // ── 내부 ref ──
   const streamRef = useRef<MediaStream | null>(null);
+  const micStreamRef = useRef<MediaStream | null>(null);     // 'both' 분리 정리용
+  const displayStreamRef = useRef<MediaStream | null>(null); // 시스템 소리 트랙
+  const mixCtxRef = useRef<AudioContext | null>(null);       // 'both' 믹스 컨텍스트
   const mediaRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<BlobPart[]>([]);
   const mimeRef = useRef('');
@@ -107,7 +111,7 @@ export function useRecorder() {
     void saveDraftMeta({ segments: segmentsRef.current, duration: getElapsed(), audioType: mimeRef.current, updatedAt: Date.now() });
   }, [getElapsed]);
 
-  const start = useCallback(async (speaker: string) => {
+  const start = useCallback(async (speaker: string, source: RecSource = 'mic') => {
     if (state !== 'idle' || startingRef.current) return; // 비동기 await 중 stale state로 인한 이중 시작 방지
     startingRef.current = true;
     setError(null);
@@ -120,22 +124,69 @@ export function useRecorder() {
     draftSeqRef.current = 0;
     await clearDraft().catch(() => {}); // 이전 드래프트 제거 후 새 녹음
 
+    const useMic = source === 'mic' || source === 'both';
+    const useSystem = source === 'system' || source === 'both';
     let stream: MediaStream;
     try {
-      stream = await navigator.mediaDevices.getUserMedia({
-        audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
-      });
+      if (useMic) {
+        micStreamRef.current = await navigator.mediaDevices.getUserMedia({
+          audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
+        });
+      }
+      if (useSystem) {
+        const disp = await navigator.mediaDevices.getDisplayMedia({ audio: true, video: true });
+        disp.getVideoTracks().forEach((t) => t.stop()); // 영상은 불필요
+        if (disp.getAudioTracks().length === 0) {
+          disp.getTracks().forEach((t) => t.stop());
+          throw new DOMException('시스템 소리를 캡처하지 못했습니다. 공유 시 "탭/시스템 오디오 공유"를 켜세요.', 'NotFoundError');
+        }
+        displayStreamRef.current = new MediaStream(disp.getAudioTracks());
+      }
+      if (source === 'both') {
+        const Ctx = window.AudioContext ?? (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+        const ctx = new Ctx();
+        mixCtxRef.current = ctx;
+        await ctx.resume().catch(() => {}); // suspended 상태로 시작 시 믹스 무음 방지
+        const dest = ctx.createMediaStreamDestination();
+        ctx.createMediaStreamSource(micStreamRef.current!).connect(dest);
+        ctx.createMediaStreamSource(displayStreamRef.current!).connect(dest);
+        stream = dest.stream;
+      } else if (source === 'system') {
+        stream = displayStreamRef.current!;
+      } else {
+        stream = micStreamRef.current!;
+      }
     } catch (e) {
+      // 부분 취득 정리
+      micStreamRef.current?.getTracks().forEach((t) => t.stop()); micStreamRef.current = null;
+      displayStreamRef.current?.getTracks().forEach((t) => t.stop()); displayStreamRef.current = null;
+      if (mixCtxRef.current) { void mixCtxRef.current.close().catch(() => {}); mixCtxRef.current = null; }
       const name = (e as DOMException)?.name ?? '';
+      const msg = (e as DOMException)?.message;
       setError(
         name === 'NotAllowedError'
-          ? '마이크 권한이 거부되었습니다. 브라우저 설정에서 허용해 주세요.'
-          : '마이크를 사용할 수 없습니다. (다른 앱이 점유 중이거나 장치 없음)'
+          ? (source === 'mic' ? '마이크 권한이 거부되었습니다. 브라우저 설정에서 허용해 주세요.' : '화면/소리 공유가 취소되었거나 거부되었습니다.')
+          : (msg || '오디오 소스를 사용할 수 없습니다. (장치 없음 또는 점유 중)')
       );
       startingRef.current = false;
       return;
     }
     streamRef.current = stream;
+
+    // 사용자가 브라우저 "공유 중지"로 시스템 소리 트랙을 끝내면 → 자동 일시정지 + 안내
+    if (source === 'system' && displayStreamRef.current) {
+      displayStreamRef.current.getAudioTracks().forEach((t) =>
+        t.addEventListener('ended', () => {
+          if (!mediaRef.current) return;
+          accumRef.current = getElapsed();
+          runningRef.current = false;
+          try { mediaRef.current.pause(); } catch { /* 이미 inactive */ }
+          sttRef.current?.pause();
+          setError('화면 공유가 중단되었습니다. 저장하려면 저장 버튼을 누르세요.');
+          setState('paused');
+        }, { once: true })
+      );
+    }
 
     // 레벨 미터
     try {
@@ -168,14 +219,17 @@ export function useRecorder() {
     } catch {
       setError('이 브라우저는 오디오 녹음을 지원하지 않습니다.');
       stream.getTracks().forEach((t) => t.stop());
+      micStreamRef.current?.getTracks().forEach((t) => t.stop()); micStreamRef.current = null;
+      displayStreamRef.current?.getTracks().forEach((t) => t.stop()); displayStreamRef.current = null;
+      if (mixCtxRef.current) { void mixCtxRef.current.close().catch(() => {}); mixCtxRef.current = null; }
       if (audioCtxRef.current) { void audioCtxRef.current.close().catch(() => {}); audioCtxRef.current = null; }
       analyserRef.current = null;
       startingRef.current = false;
       return;
     }
 
-    // STT (지원 시)
-    if (sttSupported) {
+    // STT — 마이크가 포함된 소스에서만 (시스템 소리는 SpeechRecognition 입력 불가)
+    if (sttSupported && useMic) {
       const ctrl = new SttController({
         onFinal: pushFinal,
         onInterim: setInterim,
@@ -227,6 +281,14 @@ export function useRecorder() {
     sttRef.current = null;
     streamRef.current?.getTracks().forEach((t) => t.stop());
     streamRef.current = null;
+    micStreamRef.current?.getTracks().forEach((t) => t.stop());
+    micStreamRef.current = null;
+    displayStreamRef.current?.getTracks().forEach((t) => t.stop());
+    displayStreamRef.current = null;
+    if (mixCtxRef.current) {
+      void mixCtxRef.current.close().catch(() => {});
+      mixCtxRef.current = null;
+    }
     if (audioCtxRef.current) {
       void audioCtxRef.current.close().catch(() => {});
       audioCtxRef.current = null;
@@ -248,6 +310,19 @@ export function useRecorder() {
         teardown();
         setState('idle');
         resolve(null);
+        return;
+      }
+      // 트랙 종료(공유 중지)로 레코더가 이미 inactive면 onstop이 안 오므로 즉시 결과 구성
+      if (mr.state === 'inactive') {
+        const type = mimeRef.current || mr.mimeType || 'audio/webm';
+        const blob = chunksRef.current.length ? new Blob(chunksRef.current, { type }) : null;
+        const result: RecorderResult = { blob, audioType: type, duration, segments: segmentsRef.current };
+        chunksRef.current = [];
+        mediaRef.current = null;
+        teardown();
+        setState('idle');
+        setElapsedMs(0);
+        resolve(result);
         return;
       }
       mr.onstop = () => {
@@ -297,6 +372,9 @@ export function useRecorder() {
     runningRef.current = false;
     sttRef.current?.stop();
     streamRef.current?.getTracks().forEach((t) => t.stop());
+    micStreamRef.current?.getTracks().forEach((t) => t.stop());
+    displayStreamRef.current?.getTracks().forEach((t) => t.stop());
+    if (mixCtxRef.current) void mixCtxRef.current.close().catch(() => {});
     if (audioCtxRef.current) void audioCtxRef.current.close().catch(() => {});
   }, [stopLoop]);
 

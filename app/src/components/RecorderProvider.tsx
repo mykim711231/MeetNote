@@ -1,5 +1,5 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
-import { useRecorder } from '@/hooks/useRecorder';
+import { useRecorder, type RecSource } from '@/hooks/useRecorder';
 
 // recorder를 App 레벨에 마운트해 탭 전환(RecordView 언마운트) 시에도
 // 녹음이 유지되도록 한다. 녹음 메타(제목·발언자) 입력 상태도 함께 보존.
@@ -14,6 +14,8 @@ interface RecorderCtx {
   current: string;
   setCurrent: (v: string) => void;
   addSpeaker: (name: string) => void;
+  source: RecSource;
+  setSource: (s: RecSource) => void;
 }
 
 const Ctx = createContext<RecorderCtx | null>(null);
@@ -23,6 +25,7 @@ export function RecorderProvider({ children }: { children: ReactNode }): JSX.Ele
   const [title, setTitle] = useState('');
   const [speakers, setSpeakers] = useState<string[]>(['나', '상대']);
   const [current, setCurrent] = useState('나');
+  const [source, setSource] = useState<RecSource>('mic');
 
   const { setSpeaker } = rec;
   useEffect(() => { setSpeaker(current); }, [current, setSpeaker]);
@@ -35,7 +38,7 @@ export function RecorderProvider({ children }: { children: ReactNode }): JSX.Ele
     }
   };
 
-  const value: RecorderCtx = { rec, title, setTitle, speakers, current, setCurrent, addSpeaker };
+  const value: RecorderCtx = { rec, title, setTitle, speakers, current, setCurrent, addSpeaker, source, setSource };
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }
 

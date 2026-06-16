@@ -15,7 +15,7 @@ import LevelMeter from '@/components/LevelMeter';
 export default function RecordView(): JSX.Element {
   const navigate = useNavigate();
   const saveNew = useMeetingStore((s) => s.saveNew);
-  const { rec, title, setTitle, speakers, current, setCurrent, addSpeaker } = useRecorderContext();
+  const { rec, title, setTitle, speakers, current, setCurrent, addSpeaker, source, setSource } = useRecorderContext();
 
   const { sttLang, setSttLang } = usePrefStore();
   const [adding, setAdding] = useState(false);
@@ -41,7 +41,7 @@ export default function RecordView(): JSX.Element {
 
   const onStart = async () => {
     await requestPersist().catch(() => false);
-    await rec.start(current);
+    await rec.start(current, source);
   };
 
   const onSave = async () => {
@@ -142,6 +142,30 @@ export default function RecordView(): JSX.Element {
           </button>
         )}
       </div>
+
+      {/* 녹음 소스 (대기 중에만) */}
+      {!busy && (
+        <div className="flex-none px-4 pt-3">
+          <div className="grid grid-cols-3 rounded-full bg-divider/30 p-1 text-xs">
+            {([['mic', '마이크'], ['system', '시스템 소리'], ['both', '둘 다']] as const).map(([key, label]) => (
+              <button
+                key={key}
+                type="button"
+                onClick={() => setSource(key)}
+                className={`py-1.5 rounded-full font-medium ${source === key ? 'bg-surface text-primary shadow-sm' : 'text-muted'}`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+          {source !== 'mic' && (
+            <p className="text-xs text-muted mt-1.5 leading-relaxed">
+              온라인 회의 소리를 녹음합니다. 시작 시 공유 창에서 <b>“탭/시스템 오디오 공유”</b>를 켜세요.
+              {source === 'system' && ' 시스템 소리만 녹음하면 실시간 자막은 생성되지 않습니다.'}
+            </p>
+          )}
+        </div>
+      )}
 
       {/* 타이머 + 레벨 */}
       <div className="flex-none flex flex-col items-center gap-2 py-5">
