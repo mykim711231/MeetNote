@@ -1,0 +1,24 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html, body, #root {
+    height: 100%;
+  }
+  body {
+    background-color: rgb(var(--rgb-bg));
+    color: rgb(var(--rgb-text));
+  }
+}
+
+/* 녹음 펄스 애니메이션 */
+@keyframes rec-pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.55; transform: scale(0.9); }
+}
+.rec-pulse { animation: rec-pulse 1.4s ease-in-out infinite; }
+
+@media (prefers-reduced-motion: reduce) {
+  .rec-pulse { animation: none; }
+}

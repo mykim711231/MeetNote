@@ -1,0 +1,35 @@
+{
+  "name": "meetnote-pwa",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "description": "개인용 무료 로컬 회의록 녹음기 PWA",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -b && vite build",
+    "preview": "vite preview --base /MeetNote/",
+    "typecheck": "tsc -b --noEmit"
+  },
+  "dependencies": {
+    "idb-keyval": "^6.2.1",
+    "lucide-react": "^0.453.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "react-router-dom": "^6.26.2",
+    "zustand": "^4.5.5"
+  },
+  "devDependencies": {
+    "@types/node": "^20.16.10",
+    "@types/react": "^18.3.11",
+    "@types/react-dom": "^18.3.0",
+    "@vitejs/plugin-react": "^4.3.2",
+    "autoprefixer": "^10.4.20",
+    "postcss": "^8.4.47",
+    "sharp": "^0.35.1",
+    "tailwindcss": "^3.4.13",
+    "typescript": "^5.6.2",
+    "vite": "^5.4.8",
+    "vite-plugin-pwa": "^0.20.5",
+    "workbox-window": "^7.1.0"
+  }
+}

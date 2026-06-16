@@ -1,0 +1,52 @@
+:root {
+  --rgb-bg: 250 250 250;
+  --rgb-surface: 255 255 255;
+  --rgb-text: 23 23 27;
+  --rgb-text-muted: 100 100 110;
+  --rgb-primary: 79 70 229;   /* indigo-600 */
+  --rgb-accent: 239 68 68;    /* red-500 (녹음) */
+  --rgb-divider: 226 232 240;
+
+  --font-sans:
+    -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+    "Apple SD Gothic Neo", "Malgun Gothic", sans-serif;
+
+  --tap-target: 44px;
+  --font-scale: 1;
+}
+
+html.dark {
+  --rgb-bg: 15 17 21;
+  --rgb-surface: 24 27 34;
+  --rgb-text: 230 232 236;
+  --rgb-text-muted: 156 163 175;
+  --rgb-primary: 129 140 248;  /* indigo-400 */
+  --rgb-accent: 248 113 113;   /* red-400 */
+  --rgb-divider: 51 55 64;
+}
+
+html, body {
+  font-family: var(--font-sans);
+  font-size: calc(100% * var(--font-scale));
+  -webkit-text-size-adjust: 100%;
+  -webkit-tap-highlight-color: transparent;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  min-height: 100dvh;
+}
+
+button, [role="button"] {
+  min-height: var(--tap-target);
+  touch-action: manipulation;
+}
+
+:focus-visible {
+  outline: 2px solid rgb(var(--rgb-primary));
+  outline-offset: 2px;
+}
+
+.pb-safe { padding-bottom: max(env(safe-area-inset-bottom), 0.5rem); }
+.pt-safe { padding-top: max(env(safe-area-inset-top), 0px); }
