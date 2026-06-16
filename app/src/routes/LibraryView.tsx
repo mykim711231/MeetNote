@@ -5,8 +5,30 @@ import { useMeetingStore } from '@/stores/useMeetingStore';
 import { fmtDate, fmtDuration } from '@/lib/format';
 import type { MeetingMeta } from '@/types';
 
-function snippet(m: MeetingMeta): string {
+type Sort = 'recent' | 'oldest' | 'longest';
+
+/** 검색어와 일치하는 부분을 <mark>로 강조 */
+function Highlight({ text, q }: { text: string; q: string }): JSX.Element {
+  if (!q) return <>{text}</>;
+  const idx = text.toLowerCase().indexOf(q.toLowerCase());
+  if (idx < 0) return <>{text}</>;
+  return (
+    <>
+      {text.slice(0, idx)}
+      <mark className="bg-primary/25 text-fg rounded px-0.5">{text.slice(idx, idx + q.length)}</mark>
+      {text.slice(idx + q.length)}
+    </>
+  );
+}
+
+/** 검색어가 있으면 매치 주변을, 없으면 앞부분을 발췌 */
+function snippet(m: MeetingMeta, q: string): string {
   const text = m.segments.map((s) => s.text).join(' ');
+  if (!text) return '';
+  if (q) {
+    const i = text.toLowerCase().indexOf(q.toLowerCase());
+    if (i > 40) return '…' + text.slice(i - 30, i + 50);
+  }
   return text.slice(0, 80);
 }
 
@@ -15,18 +37,25 @@ export default function LibraryView(): JSX.Element {
   const { meetings, folders, loaded, load } = useMeetingStore();
   const [q, setQ] = useState('');
   const [folderId, setFolderId] = useState<string | 'all'>('all');
+  const [sort, setSort] = useState<Sort>('recent');
 
   useEffect(() => { if (!loaded) void load(); }, [loaded, load]);
 
   const filtered = useMemo(() => {
     const needle = q.trim().toLowerCase();
-    return meetings.filter((m) => {
+    const list = meetings.filter((m) => {
       if (folderId !== 'all' && m.folderId !== folderId) return false;
       if (!needle) return true;
       if (m.title.toLowerCase().includes(needle)) return true;
       return m.segments.some((s) => s.text.toLowerCase().includes(needle));
     });
-  }, [meetings, q, folderId]);
+    const sorted = [...list];
+    if (sort === 'oldest') sorted.reverse();          // meetings는 최신순 → 뒤집으면 오래된순
+    else if (sort === 'longest') sorted.sort((a, b) => b.duration - a.duration);
+    return sorted;
+  }, [meetings, q, folderId, sort]);
+
+  const needle = q.trim();
 
   return (
     <div className="flex flex-col h-full">
@@ -44,18 +73,33 @@ export default function LibraryView(): JSX.Element {
         </div>
       </div>
 
-      {/* 폴더 필터 */}
-      {folders.length > 0 && (
-        <div className="flex-none px-4 pt-3 flex gap-2 overflow-x-auto">
-          <Chip active={folderId === 'all'} onClick={() => setFolderId('all')} label="전체" />
+      {/* 폴더 필터 + 정렬 */}
+      <div className="flex-none px-4 pt-3 flex items-center gap-2">
+        <div className="flex gap-2 overflow-x-auto flex-1">
+          {folders.length > 0 && <Chip active={folderId === 'all'} onClick={() => setFolderId('all')} label="전체" />}
           {folders.map((f) => (
             <Chip key={f.id} active={folderId === f.id} onClick={() => setFolderId(f.id)} label={f.name} />
           ))}
         </div>
+        <select
+          value={sort}
+          onChange={(e) => setSort(e.target.value as Sort)}
+          aria-label="정렬 기준"
+          className="flex-none text-xs bg-surface border border-divider rounded-full px-2 py-1.5 text-muted outline-none"
+        >
+          <option value="recent">최신순</option>
+          <option value="oldest">오래된순</option>
+          <option value="longest">긴 길이순</option>
+        </select>
+      </div>
+
+      {/* 결과 개수 */}
+      {loaded && meetings.length > 0 && (
+        <div className="flex-none px-4 pt-2 text-xs text-muted">{filtered.length}건</div>
       )}
 
       {/* 목록 */}
-      <div className="flex-1 min-h-0 overflow-y-auto px-4 py-3 space-y-2">
+      <div className="flex-1 min-h-0 overflow-y-auto px-4 py-2 space-y-2">
         {!loaded ? (
           <p className="text-center text-muted text-sm pt-10">불러오는 중…</p>
         ) : filtered.length === 0 ? (
@@ -81,9 +125,11 @@ export default function LibraryView(): JSX.Element {
               className="w-full text-left flex items-center gap-3 rounded-2xl bg-surface border border-divider px-4 py-3 active:scale-[0.99] transition"
             >
               <div className="flex-1 min-w-0">
-                <div className="font-semibold text-fg truncate">{m.title}</div>
+                <div className="font-semibold text-fg truncate"><Highlight text={m.title} q={needle} /></div>
                 <div className="text-xs text-muted mt-0.5">{fmtDate(m.date)} · {fmtDuration(m.duration)}</div>
-                {snippet(m) && <div className="text-xs text-muted mt-1 truncate">{snippet(m)}</div>}
+                {snippet(m, needle) && (
+                  <div className="text-xs text-muted mt-1 truncate"><Highlight text={snippet(m, needle)} q={needle} /></div>
+                )}
               </div>
               <ChevronRight size={18} className="text-muted flex-none" />
             </button>
