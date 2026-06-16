@@ -173,11 +173,17 @@ export function useRecorder() {
     }
     streamRef.current = stream;
 
-    // 사용자가 브라우저 "공유 중지"로 시스템 소리 트랙을 끝내면 → 자동 일시정지 + 안내
-    if (source === 'system' && displayStreamRef.current) {
+    // 사용자가 브라우저 "공유 중지"로 시스템 소리 트랙을 끝내면 처리
+    if (displayStreamRef.current) {
       displayStreamRef.current.getAudioTracks().forEach((t) =>
         t.addEventListener('ended', () => {
           if (!mediaRef.current) return;
+          if (source === 'both') {
+            // 마이크는 살아 있으므로 녹음 계속, 안내만
+            setError('시스템 소리 공유가 중단되어 이후로는 마이크만 녹음됩니다.');
+            return;
+          }
+          // 'system': 더 녹음할 소스가 없으므로 일시정지
           accumRef.current = getElapsed();
           runningRef.current = false;
           try { mediaRef.current.pause(); } catch { /* 이미 inactive */ }

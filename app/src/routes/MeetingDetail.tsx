@@ -35,6 +35,7 @@ export default function MeetingDetail(): JSX.Element {
   const [curMs, setCurMs] = useState(0);
   const [speedIdx, setSpeedIdx] = useState(0);
   const [editing, setEditing] = useState(false);
+  const [noteDraft, setNoteDraft] = useState<string | null>(null);
 
   const mid = Number(id);
 
@@ -109,6 +110,15 @@ export default function MeetingDetail(): JSX.Element {
     return () => window.removeEventListener('keydown', onKey);
   }, [meeting?.hasAudio, audioUrl]);
 
+  // 메모 드래프트: 회의 로드/변경 시 초기화, 입력은 디바운스 저장(탭 전환·blur 미발화에도 보존)
+  useEffect(() => { if (meeting) setNoteDraft(meeting.note ?? ''); }, [meeting?.id]);
+  useEffect(() => {
+    if (noteDraft == null) return;
+    const t = window.setTimeout(() => { void onNote(noteDraft); }, 500);
+    return () => window.clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [noteDraft]);
+
   const summary = useMemo(() => (meeting ? summarize(meeting.segments) : []), [meeting]);
   const todos = useMemo(() => (meeting ? extractTodos(meeting.segments) : []), [meeting]);
   const shares = useMemo(() => (meeting ? talkShares(meeting.segments) : []), [meeting]);
@@ -156,43 +166,26 @@ export default function MeetingDetail(): JSX.Element {
     if (audioRef.current) audioRef.current.playbackRate = SPEEDS[next];
   };
 
-  const onRename = async (title: string) => {
-    const next = { ...meeting, title: title.trim() || meeting.title };
-    setMeeting(next);
-    await update(next);
+  // 모든 변경은 함수형 setMeeting으로 최신 state를 캡처해 비동기 겹침 시 덮어쓰기를 방지
+  const mutate = async (fn: (m: MeetingMeta) => MeetingMeta) => {
+    let next: MeetingMeta | null = null;
+    let changed = false;
+    setMeeting((m) => {
+      if (!m) return m;
+      next = fn(m);
+      changed = next !== m; // fn이 동일 참조를 반환하면 변경 없음
+      return next;
+    });
+    if (next && changed) await update(next);
   };
 
-  const onFolder = async (folderId: string | null) => {
-    const next = { ...meeting, folderId };
-    setMeeting(next);
-    await update(next);
-  };
-
-  const onNote = async (note: string) => {
-    if (note === (meeting.note ?? '')) return;
-    const next = { ...meeting, note };
-    setMeeting(next);
-    await update(next);
-  };
-
-  const patchSegment = async (i: number, patch: Partial<{ text: string; who: string }>) => {
-    const segments = meeting.segments.map((s, idx) => (idx === i ? { ...s, ...patch } : s));
-    const next = { ...meeting, segments };
-    setMeeting(next);
-    await update(next);
-  };
-
-  const deleteSegment = async (i: number) => {
-    const next = { ...meeting, segments: meeting.segments.filter((_, idx) => idx !== i) };
-    setMeeting(next);
-    await update(next);
-  };
-
-  const onTogglePin = async () => {
-    const next = { ...meeting, pinned: !meeting.pinned };
-    setMeeting(next);
-    await update(next);
-  };
+  const onRename = (title: string) => mutate((m) => ({ ...m, title: title.trim() || m.title }));
+  const onFolder = (folderId: string | null) => mutate((m) => ({ ...m, folderId }));
+  const onNote = (note: string) => mutate((m) => (note === (m.note ?? '') ? m : { ...m, note }));
+  const patchSegment = (i: number, patch: Partial<{ text: string; who: string }>) =>
+    mutate((m) => ({ ...m, segments: m.segments.map((s, idx) => (idx === i ? { ...s, ...patch } : s)) }));
+  const deleteSegment = (i: number) => mutate((m) => ({ ...m, segments: m.segments.filter((_, idx) => idx !== i) }));
+  const onTogglePin = () => mutate((m) => ({ ...m, pinned: !m.pinned }));
 
   const onDelete = async () => {
     const ok = await confirmDialog({ message: '이 회의록을 삭제할까요?\n되돌릴 수 없습니다.', confirmLabel: '삭제', danger: true });
@@ -409,8 +402,8 @@ export default function MeetingDetail(): JSX.Element {
 
         {tab === 'note' && (
           <textarea
-            key={meeting.id}
-            defaultValue={meeting.note ?? ''}
+            value={noteDraft ?? ''}
+            onChange={(e) => setNoteDraft(e.target.value)}
             onBlur={(e) => { void onNote(e.target.value); }}
             placeholder="이 회의에 대한 메모를 자유롭게 적어두세요…"
             aria-label="회의 메모"

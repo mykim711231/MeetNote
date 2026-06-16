@@ -21,6 +21,7 @@ export default function RecordView(): JSX.Element {
   const [adding, setAdding] = useState(false);
   const [newSpeaker, setNewSpeaker] = useState('');
   const [saving, setSaving] = useState(false);
+  const [starting, setStarting] = useState(false);
 
   const scrollRef = useRef<HTMLDivElement>(null);
 
@@ -40,8 +41,14 @@ export default function RecordView(): JSX.Element {
   };
 
   const onStart = async () => {
-    await requestPersist().catch(() => false);
-    await rec.start(current, source);
+    if (starting) return;
+    setStarting(true);
+    try {
+      await requestPersist().catch(() => false);
+      await rec.start(current, source);
+    } finally {
+      setStarting(false);
+    }
   };
 
   const onSave = async () => {
@@ -200,7 +207,7 @@ export default function RecordView(): JSX.Element {
       {/* 컨트롤 */}
       <div className="flex-none flex items-center justify-center gap-6 py-4 border-t border-divider">
         {!busy ? (
-          <button type="button" onClick={onStart} aria-label="녹음 시작" className="w-20 h-20 rounded-full bg-accent text-white grid place-items-center shadow-lg active:scale-95 transition">
+          <button type="button" onClick={onStart} disabled={starting} aria-label="녹음 시작" className="w-20 h-20 rounded-full bg-accent text-white grid place-items-center shadow-lg active:scale-95 transition disabled:opacity-60">
             <Mic size={34} />
           </button>
         ) : (

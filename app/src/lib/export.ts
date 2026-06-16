@@ -59,6 +59,9 @@ export async function shareText(title: string, text: string): Promise<boolean> {
 export function printMeeting(m: MeetingMeta): void {
   const w = window.open('', '_blank', 'width=800,height=900');
   if (!w) return;
+  const noteHtml = m.note && m.note.trim()
+    ? `<h2>메모</h2><p>${esc(m.note.trim()).replace(/\n/g, '<br>')}</p>`
+    : '';
   const summary = summarize(m.segments);
   const todos = extractTodos(m.segments);
   const summaryHtml = summary.length
@@ -70,17 +73,19 @@ export function printMeeting(m: MeetingMeta): void {
   const rows = m.segments
     .map((s) => `<p><b>[${fmtTime(s.ts)}] ${esc(s.who)}:</b> ${esc(s.text)}</p>`)
     .join('');
-  w.document.write(
-    `<!doctype html><html lang="ko"><head><meta charset="utf-8"><title>${esc(m.title || '회의록')}</title>` +
-    `<style>body{font-family:system-ui,-apple-system,"Malgun Gothic",sans-serif;padding:28px;line-height:1.65;color:#1a1a1a;max-width:760px;margin:auto}` +
-    `h1{font-size:22px;margin:0 0 4px}h2{font-size:16px;margin:20px 0 6px}.meta{color:#666;font-size:13px;margin-bottom:16px}p{margin:5px 0}ul{margin:6px 0 0 18px}@media print{body{padding:0}}</style>` +
-    `</head><body><h1>${esc(m.title || '회의록')}</h1>` +
-    `<div class="meta">${fmtDate(m.date)} · ${fmtDuration(m.duration)}</div>` +
-    summaryHtml + todoHtml + `<h2>전문</h2>${rows}</body></html>`
-  );
-  w.document.close();
-  w.focus();
-  setTimeout(() => { try { w.print(); } catch { /* noop */ } }, 250);
+  try {
+    w.document.write(
+      `<!doctype html><html lang="ko"><head><meta charset="utf-8"><title>${esc(m.title || '회의록')}</title>` +
+      `<style>body{font-family:system-ui,-apple-system,"Malgun Gothic",sans-serif;padding:28px;line-height:1.65;color:#1a1a1a;max-width:760px;margin:auto}` +
+      `h1{font-size:22px;margin:0 0 4px}h2{font-size:16px;margin:20px 0 6px}.meta{color:#666;font-size:13px;margin-bottom:16px}p{margin:5px 0}ul{margin:6px 0 0 18px}@media print{body{padding:0}}</style>` +
+      `</head><body><h1>${esc(m.title || '회의록')}</h1>` +
+      `<div class="meta">${fmtDate(m.date)} · ${fmtDuration(m.duration)}</div>` +
+      noteHtml + summaryHtml + todoHtml + `<h2>전문</h2>${rows}</body></html>`
+    );
+    w.document.close();
+    w.focus();
+    setTimeout(() => { try { w.print(); } catch { /* noop */ } }, 250);
+  } catch { /* 팝업이 닫혔거나 Document 쓰기 불가 */ }
 }
 
 /** 파일명에 안전하지 않은 문자 제거 */
@@ -114,6 +119,12 @@ export function toMarkdown(m: MeetingMeta): string {
   out.push(`- 길이: ${fmtDuration(m.duration)}`);
   out.push('');
 
+  if (m.note && m.note.trim()) {
+    out.push('## 메모');
+    out.push(m.note.trim().split('\n').map(mdInline).join('\n'));
+    out.push('');
+  }
+
   const summary = summarize(m.segments);
   if (summary.length) {
     out.push('## 요약');
@@ -130,7 +141,7 @@ export function toMarkdown(m: MeetingMeta): string {
 
   out.push('## 전문');
   for (const s of m.segments) {
-    out.push(`**[${fmtTime(s.ts)}] ${mdInline(s.who)}:** ${s.text}`);
+    out.push(`**[${fmtTime(s.ts)}] ${mdInline(s.who)}:** ${mdInline(s.text)}`);
     out.push('');
   }
   return out.join('\n');
