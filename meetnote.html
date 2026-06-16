@@ -42,8 +42,8 @@
     --mono:"SF Mono",ui-monospace,"Cascadia Code","Roboto Mono",Menlo,monospace;
     --sys-sans:-apple-system,BlinkMacSystemFont,"Segoe UI","Pretendard","Apple SD Gothic Neo",sans-serif;
     --serif:"Iowan Old Style","Apple Garamond","Times New Roman",Georgia,serif;
-    /* 사용자 선택 글꼴(설정). 기본=손글씨 */
-    --app-font:"Nanum Pen Script","Gaegu",var(--serif);
+    /* 사용자 선택 글꼴(설정). 기본=고딕(시스템 sans) — JS 적용 전 첫 페인트 깜빡임 방지용 기본값 */
+    --app-font:var(--sys-sans);
     --sans:var(--app-font);
     --hand:var(--app-font);  /* 제목·브랜드는 선택 글꼴을 따름 */
     --fs:16px;            /* 본문 기준 글자크기 (설정에서 조절) */
@@ -879,7 +879,7 @@ function applyFont(){
 }
 const FONT_FACES=[{id:"hand",name:"손글씨(나눔펜)"},{id:"kyobo",name:"교보손글씨"},{id:"gothic",name:"고딕"},{id:"myeongjo",name:"명조"}];
 function applyFontFace(){
-  const id=prefs.fontFace||"hand";
+  const id=prefs.fontFace||"gothic";   // 기본 글꼴 = 고딕
   document.documentElement.setAttribute("data-font",id);
 }
 // 최초 적용(테마 미설정 시 OS 선호 반영)
@@ -2126,7 +2126,7 @@ setMeetingType("general");
 
 /* ============ 설정 패널 ============ */
 function syncSettingsUI(){
-  const ff=prefs.fontFace||"hand";
+  const ff=prefs.fontFace||"gothic";
   $$("#setFontFace button").forEach(b=>b.classList.toggle("on",b.dataset.v===ff));
   const fi=typeof prefs.fontIdx==="number"?prefs.fontIdx:1;
   $$("#setFontSize button").forEach(b=>b.classList.toggle("on",+b.dataset.i===fi));
