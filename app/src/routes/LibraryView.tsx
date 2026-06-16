@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Search, Mic, ChevronRight, FolderOpen } from 'lucide-react';
+import { Search, Mic, ChevronRight, FolderOpen, Pin } from 'lucide-react';
 import { useMeetingStore } from '@/stores/useMeetingStore';
 import { fmtDate, fmtDuration } from '@/lib/format';
 import type { MeetingMeta } from '@/types';
@@ -52,6 +52,8 @@ export default function LibraryView(): JSX.Element {
     const sorted = [...list];
     if (sort === 'oldest') sorted.reverse();          // meetings는 최신순 → 뒤집으면 오래된순
     else if (sort === 'longest') sorted.sort((a, b) => b.duration - a.duration);
+    // 고정 회의록을 항상 상단으로 (안정 정렬 → 그룹 내 순서 유지)
+    sorted.sort((a, b) => (b.pinned ? 1 : 0) - (a.pinned ? 1 : 0));
     return sorted;
   }, [meetings, q, folderId, sort]);
 
@@ -125,7 +127,10 @@ export default function LibraryView(): JSX.Element {
               className="w-full text-left flex items-center gap-3 rounded-2xl bg-surface border border-divider px-4 py-3 active:scale-[0.99] transition"
             >
               <div className="flex-1 min-w-0">
-                <div className="font-semibold text-fg truncate"><Highlight text={m.title} q={needle} /></div>
+                <div className="font-semibold text-fg truncate flex items-center gap-1">
+                  {m.pinned && <Pin size={13} className="text-primary flex-none" fill="currentColor" />}
+                  <span className="truncate"><Highlight text={m.title} q={needle} /></span>
+                </div>
                 <div className="text-xs text-muted mt-0.5">{fmtDate(m.date)} · {fmtDuration(m.duration)}</div>
                 {snippet(m, needle) && (
                   <div className="text-xs text-muted mt-1 truncate"><Highlight text={snippet(m, needle)} q={needle} /></div>

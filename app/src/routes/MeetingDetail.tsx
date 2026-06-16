@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import {
   ArrowLeft, Play, Pause, Trash2, Download, FileText, FileCode,
-  FileJson, Music, Gauge, Pencil, Copy, Share2, Printer,
+  FileJson, Music, Gauge, Pencil, Copy, Share2, Printer, Pin,
 } from 'lucide-react';
 import { getMeeting, getAudio } from '@/lib/db';
 import { useMeetingStore } from '@/stores/useMeetingStore';
@@ -165,6 +165,12 @@ export default function MeetingDetail(): JSX.Element {
     await update(next);
   };
 
+  const onTogglePin = async () => {
+    const next = { ...meeting, pinned: !meeting.pinned };
+    setMeeting(next);
+    await update(next);
+  };
+
   const onDelete = async () => {
     const ok = await confirmDialog({ message: '이 회의록을 삭제할까요?\n되돌릴 수 없습니다.', confirmLabel: '삭제', danger: true });
     if (!ok) return;
@@ -203,6 +209,9 @@ export default function MeetingDetail(): JSX.Element {
           aria-label="회의 제목"
           className="flex-1 bg-transparent text-fg font-semibold outline-none"
         />
+        <button type="button" onClick={onTogglePin} aria-label={meeting.pinned ? '고정 해제' : '상단 고정'} aria-pressed={!!meeting.pinned} className={`w-10 h-10 grid place-items-center ${meeting.pinned ? 'text-primary' : 'text-muted'}`}>
+          <Pin size={18} fill={meeting.pinned ? 'currentColor' : 'none'} />
+        </button>
         <button type="button" onClick={onDelete} aria-label="삭제" className="w-10 h-10 grid place-items-center text-accent">
           <Trash2 size={18} />
         </button>
