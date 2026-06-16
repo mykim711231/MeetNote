@@ -2,13 +2,14 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import {
   ArrowLeft, Play, Pause, Trash2, Download, FileText, FileCode,
-  FileJson, Music, Gauge, Pencil,
+  FileJson, Music, Gauge, Pencil, Copy, Share2, Printer,
 } from 'lucide-react';
 import { getMeeting, getAudio } from '@/lib/db';
 import { useMeetingStore } from '@/stores/useMeetingStore';
 import { summarize, extractTodos } from '@/lib/summarize';
 import {
   downloadBlob, safeFilename, toPlainText, toMarkdown,
+  copyText, shareText, canShare, printMeeting,
 } from '@/lib/export';
 import { toast } from '@/stores/useToastStore';
 import { confirmDialog } from '@/stores/useConfirmStore';
@@ -181,6 +182,12 @@ export default function MeetingDetail(): JSX.Element {
     const ext = (meeting.audioType.includes('mp4') ? 'm4a' : meeting.audioType.includes('ogg') ? 'ogg' : 'webm');
     downloadBlob(blob, `${safeFilename(meeting.title)}.${ext}`);
   };
+  const onCopy = async () => {
+    const ok = await copyText(toMarkdown(meeting));
+    toast(ok ? '클립보드에 복사했습니다.' : '복사에 실패했습니다.', ok ? 'success' : 'error');
+  };
+  const onShare = () => { void shareText(meeting.title || '회의록', toPlainText(meeting)); };
+  const onPrint = () => printMeeting(meeting);
 
   return (
     <div className="flex flex-col h-full">
@@ -376,6 +383,9 @@ export default function MeetingDetail(): JSX.Element {
         <ExportBtn onClick={exportMd} Icon={FileCode} label="MD" />
         <ExportBtn onClick={exportJson} Icon={FileJson} label="JSON" />
         {meeting.hasAudio && <ExportBtn onClick={exportAudio} Icon={Music} label="오디오" />}
+        <ExportBtn onClick={onCopy} Icon={Copy} label="복사" />
+        {canShare() && <ExportBtn onClick={onShare} Icon={Share2} label="공유" />}
+        <ExportBtn onClick={onPrint} Icon={Printer} label="인쇄" />
       </div>
     </div>
   );

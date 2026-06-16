@@ -1,6 +1,6 @@
 // 내보내기 · 백업/복원 (완전 로컬)
 import type { MeetingMeta, Folder, BackupFile } from '@/types';
-import { fmtTime, fmtDate, fmtDuration } from './format';
+import { fmtTime, fmtDate, fmtDuration, esc } from './format';
 import { summarize, extractTodos } from './summarize';
 import { listMeetings, getAudio, saveMeeting } from './db';
 
@@ -15,6 +15,72 @@ export function downloadBlob(blob: Blob, filename: string): void {
   a.remove();
   // 일부 브라우저가 클릭 후 즉시 revoke하면 다운로드 실패 → 지연
   setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+/** 클립보드 복사 (실패 시 execCommand 폴백) */
+export async function copyText(text: string): Promise<boolean> {
+  try {
+    await navigator.clipboard.writeText(text);
+    return true;
+  } catch {
+    try {
+      const ta = document.createElement('textarea');
+      ta.value = text;
+      ta.style.position = 'fixed';
+      ta.style.opacity = '0';
+      document.body.appendChild(ta);
+      ta.select();
+      const ok = document.execCommand('copy');
+      ta.remove();
+      return ok;
+    } catch {
+      return false;
+    }
+  }
+}
+
+/** Web Share 지원 여부 */
+export function canShare(): boolean {
+  return typeof navigator !== 'undefined' && typeof navigator.share === 'function';
+}
+
+/** 텍스트 공유 (공유 시트). 취소/미지원 시 false */
+export async function shareText(title: string, text: string): Promise<boolean> {
+  if (!canShare()) return false;
+  try {
+    await navigator.share({ title, text });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** 인쇄용 창을 열어 출력(사용자가 PDF로 저장 가능) */
+export function printMeeting(m: MeetingMeta): void {
+  const w = window.open('', '_blank', 'width=800,height=900');
+  if (!w) return;
+  const summary = summarize(m.segments);
+  const todos = extractTodos(m.segments);
+  const summaryHtml = summary.length
+    ? `<h2>요약</h2><ul>${summary.map((s) => `<li>${esc(s)}</li>`).join('')}</ul>`
+    : '';
+  const todoHtml = todos.length
+    ? `<h2>할 일</h2><ul>${todos.map((t) => `<li>${esc(t.text)} (${esc(t.who)})</li>`).join('')}</ul>`
+    : '';
+  const rows = m.segments
+    .map((s) => `<p><b>[${fmtTime(s.ts)}] ${esc(s.who)}:</b> ${esc(s.text)}</p>`)
+    .join('');
+  w.document.write(
+    `<!doctype html><html lang="ko"><head><meta charset="utf-8"><title>${esc(m.title || '회의록')}</title>` +
+    `<style>body{font-family:system-ui,-apple-system,"Malgun Gothic",sans-serif;padding:28px;line-height:1.65;color:#1a1a1a;max-width:760px;margin:auto}` +
+    `h1{font-size:22px;margin:0 0 4px}h2{font-size:16px;margin:20px 0 6px}.meta{color:#666;font-size:13px;margin-bottom:16px}p{margin:5px 0}ul{margin:6px 0 0 18px}@media print{body{padding:0}}</style>` +
+    `</head><body><h1>${esc(m.title || '회의록')}</h1>` +
+    `<div class="meta">${fmtDate(m.date)} · ${fmtDuration(m.duration)}</div>` +
+    summaryHtml + todoHtml + `<h2>전문</h2>${rows}</body></html>`
+  );
+  w.document.close();
+  w.focus();
+  setTimeout(() => { try { w.print(); } catch { /* noop */ } }, 250);
 }
 
 /** 파일명에 안전하지 않은 문자 제거 */
