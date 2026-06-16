@@ -7,6 +7,7 @@ import { requestPersist, clearDraft } from '@/lib/db';
 import { toast } from '@/stores/useToastStore';
 import { confirmDialog } from '@/stores/useConfirmStore';
 import { fmtTime } from '@/lib/format';
+import { speakerColor } from '@/lib/speakers';
 import type { MeetingMeta } from '@/types';
 import LevelMeter from '@/components/LevelMeter';
 
@@ -153,7 +154,7 @@ export default function RecordView(): JSX.Element {
         )}
         {rec.segments.map((s, i) => (
           <div key={i} className="text-sm">
-            <span className="text-primary font-semibold">{s.who} </span>
+            <span className="font-semibold" style={{ color: speakerColor(s.who) }}>{s.who} </span>
             <span className="text-muted text-xs tabular-nums">[{fmtTime(s.ts)}]</span>
             <span className="text-fg"> {s.text}</span>
           </div>

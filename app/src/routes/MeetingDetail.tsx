@@ -13,6 +13,7 @@ import {
 import { toast } from '@/stores/useToastStore';
 import { confirmDialog } from '@/stores/useConfirmStore';
 import { fmtTime, fmtDate, fmtDuration } from '@/lib/format';
+import { speakerColor, talkShares } from '@/lib/speakers';
 import type { MeetingMeta } from '@/types';
 
 type DetailTab = 'transcript' | 'summary' | 'todos';
@@ -93,6 +94,7 @@ export default function MeetingDetail(): JSX.Element {
 
   const summary = useMemo(() => (meeting ? summarize(meeting.segments) : []), [meeting]);
   const todos = useMemo(() => (meeting ? extractTodos(meeting.segments) : []), [meeting]);
+  const shares = useMemo(() => (meeting ? talkShares(meeting.segments) : []), [meeting]);
 
   // 현재 재생 위치에 해당하는 세그먼트 index
   const activeIdx = useMemo(() => {
@@ -253,6 +255,25 @@ export default function MeetingDetail(): JSX.Element {
         </div>
       )}
 
+      {/* 발언 비중 (2인 이상) */}
+      {shares.length > 1 && (
+        <div className="flex-none px-4 pt-3">
+          <div className="flex h-2 rounded-full overflow-hidden">
+            {shares.map((sh) => (
+              <div key={sh.who} style={{ width: `${sh.pct}%`, background: sh.color }} title={`${sh.who} ${sh.pct}%`} />
+            ))}
+          </div>
+          <div className="flex flex-wrap gap-x-3 gap-y-1 mt-1.5">
+            {shares.map((sh) => (
+              <span key={sh.who} className="flex items-center gap-1 text-xs text-muted">
+                <span className="w-2 h-2 rounded-full" style={{ background: sh.color }} />
+                {sh.who} {sh.pct}%
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* 탭 */}
       <div className="flex-none px-4 pt-3">
         <div className="grid grid-cols-3 rounded-full bg-divider/30 p-1 text-sm">
@@ -309,7 +330,7 @@ export default function MeetingDetail(): JSX.Element {
                     onClick={() => meeting.hasAudio && seekTo(s.ts)}
                     className={`w-full text-left rounded-xl px-3 py-2 transition ${i === activeIdx ? 'bg-primary/10' : ''} ${meeting.hasAudio ? 'cursor-pointer' : 'cursor-default'}`}
                   >
-                    <span className="text-primary font-semibold text-sm">{s.who} </span>
+                    <span className="font-semibold text-sm" style={{ color: speakerColor(s.who) }}>{s.who} </span>
                     <span className="text-muted text-xs tabular-nums">[{fmtTime(s.ts)}]</span>
                     <div className="text-fg text-sm mt-0.5">{s.text}</div>
                   </button>
