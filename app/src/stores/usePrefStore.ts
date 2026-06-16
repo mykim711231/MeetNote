@@ -2,34 +2,45 @@ import { create } from 'zustand';
 
 export type Theme = 'light' | 'dark';
 
+export const STT_LANGS = [
+  { code: 'ko-KR', label: '한국어' },
+  { code: 'en-US', label: 'English' },
+  { code: 'ja-JP', label: '日本語' },
+  { code: 'zh-CN', label: '中文' },
+] as const;
+
 interface PrefState {
   theme: Theme;
   fontScale: number;        // 0.9 ~ 1.4
+  sttLang: string;          // 실시간 자막 인식 언어
   toggleTheme: () => void;
   setFontScale: (v: number) => void;
+  setSttLang: (lang: string) => void;
 }
 
 const PREF_KEY = 'meetnote.prefs.v1';
 
-function load(): { theme: Theme; fontScale: number } {
+interface Stored { theme: Theme; fontScale: number; sttLang: string }
+
+function load(): Stored {
   try {
     const raw = localStorage.getItem(PREF_KEY);
     if (raw) {
-      const p = JSON.parse(raw) as Partial<{ theme: Theme; fontScale: number }>;
+      const p = JSON.parse(raw) as Partial<Stored>;
       return {
         theme: p.theme === 'dark' ? 'dark' : 'light',
         fontScale: typeof p.fontScale === 'number' ? p.fontScale : 1,
+        sttLang: typeof p.sttLang === 'string' ? p.sttLang : 'ko-KR',
       };
     }
   } catch { /* noop */ }
-  // 최초: OS 다크모드 선호 반영
   const prefersDark = window.matchMedia?.('(prefers-color-scheme: dark)').matches ?? false;
-  return { theme: prefersDark ? 'dark' : 'light', fontScale: 1 };
+  return { theme: prefersDark ? 'dark' : 'light', fontScale: 1, sttLang: 'ko-KR' };
 }
 
-function persist(theme: Theme, fontScale: number): void {
+function persist(s: Stored): void {
   try {
-    localStorage.setItem(PREF_KEY, JSON.stringify({ theme, fontScale }));
+    localStorage.setItem(PREF_KEY, JSON.stringify(s));
   } catch { /* noop */ }
 }
 
@@ -45,21 +56,27 @@ export function applyPrefs(theme: Theme, fontScale: number): void {
 const initial = load();
 applyPrefs(initial.theme, initial.fontScale);
 
-export const usePrefStore = create<PrefState>((set) => ({
+export const usePrefStore = create<PrefState>((set, get) => ({
   theme: initial.theme,
   fontScale: initial.fontScale,
+  sttLang: initial.sttLang,
   toggleTheme: () =>
     set((s) => {
       const theme: Theme = s.theme === 'dark' ? 'light' : 'dark';
       applyPrefs(theme, s.fontScale);
-      persist(theme, s.fontScale);
+      persist({ theme, fontScale: s.fontScale, sttLang: s.sttLang });
       return { theme };
     }),
   setFontScale: (v) =>
     set((s) => {
       const fontScale = Math.min(1.4, Math.max(0.9, Math.round(v * 100) / 100));
       applyPrefs(s.theme, fontScale);
-      persist(s.theme, fontScale);
+      persist({ theme: s.theme, fontScale, sttLang: s.sttLang });
       return { fontScale };
     }),
+  setSttLang: (lang) => {
+    const { theme, fontScale } = get();
+    persist({ theme, fontScale, sttLang: lang });
+    set({ sttLang: lang });
+  },
 }));

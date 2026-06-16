@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { Mic, Pause, Play, Square, X, Plus, AlertTriangle } from 'lucide-react';
 import { useRecorderContext } from '@/components/RecorderProvider';
 import { useMeetingStore } from '@/stores/useMeetingStore';
+import { usePrefStore, STT_LANGS } from '@/stores/usePrefStore';
 import { requestPersist, clearDraft } from '@/lib/db';
 import { toast } from '@/stores/useToastStore';
 import { confirmDialog } from '@/stores/useConfirmStore';
@@ -16,6 +17,7 @@ export default function RecordView(): JSX.Element {
   const saveNew = useMeetingStore((s) => s.saveNew);
   const { rec, title, setTitle, speakers, current, setCurrent, addSpeaker } = useRecorderContext();
 
+  const { sttLang, setSttLang } = usePrefStore();
   const [adding, setAdding] = useState(false);
   const [newSpeaker, setNewSpeaker] = useState('');
   const [saving, setSaving] = useState(false);
@@ -89,15 +91,24 @@ export default function RecordView(): JSX.Element {
       )}
       {rec.error && <Banner text={rec.error} />}
 
-      {/* 제목 입력 */}
-      <div className="flex-none px-4 pt-3">
+      {/* 제목 입력 + 자막 언어 */}
+      <div className="flex-none px-4 pt-3 flex items-center gap-2 border-b border-divider pb-2">
         <input
           value={title}
           onChange={(e) => setTitle(e.target.value)}
           placeholder="회의 제목 (선택)"
           aria-label="회의 제목"
-          className="w-full bg-transparent text-fg text-lg font-semibold placeholder:text-muted/60 outline-none border-b border-divider pb-2"
+          className="flex-1 bg-transparent text-fg text-lg font-semibold placeholder:text-muted/60 outline-none"
         />
+        <select
+          value={sttLang}
+          onChange={(e) => setSttLang(e.target.value)}
+          disabled={busy}
+          aria-label="자막 언어"
+          className="flex-none text-xs bg-surface border border-divider rounded-full px-2 py-1.5 text-muted outline-none disabled:opacity-50"
+        >
+          {STT_LANGS.map((l) => <option key={l.code} value={l.code}>{l.label}</option>)}
+        </select>
       </div>
 
       {/* 발언자 선택 */}

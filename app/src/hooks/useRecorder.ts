@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import type { Segment } from '@/types';
 import { SttController, isSttSupported } from '@/lib/stt';
 import { appendDraftChunk, saveDraftMeta, clearDraft } from '@/lib/db';
+import { usePrefStore } from '@/stores/usePrefStore';
 import { useWakeLock } from './useWakeLock';
 
 export type RecState = 'idle' | 'recording' | 'paused';
@@ -179,7 +180,7 @@ export function useRecorder() {
         onFinal: pushFinal,
         onInterim: setInterim,
         onFatal: () => setInterim(''),
-      });
+      }, usePrefStore.getState().sttLang);
       ctrl.start();
       sttRef.current = ctrl;
     }
