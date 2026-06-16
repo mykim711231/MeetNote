@@ -435,6 +435,24 @@
   .warn{background:#FBEEE6;border:1px solid var(--accent);color:#7a2f1d;
     border-radius:12px;padding:14px 16px;font-size:14px;margin-bottom:16px;line-height:1.5}
   .warn b{display:block;margin-bottom:4px}
+  /* PWA 설치 배너 / 안내 */
+  .install-banner{display:flex;align-items:center;gap:10px;background:var(--paper-2);
+    border:1px solid var(--accent-2);border-left:4px solid var(--accent-2);border-radius:12px;
+    padding:12px 14px;margin-bottom:16px;box-shadow:var(--shadow)}
+  .install-banner .ib-text{flex:1;font-size:13.5px;line-height:1.5;color:var(--ink-2)}
+  .install-banner .ib-install{flex:0 0 auto;background:var(--accent-2);color:#fff;border:none;
+    border-radius:999px;padding:9px 18px;font-size:14px;font-weight:700;cursor:pointer;font-family:var(--sans)}
+  .install-banner .ib-x{flex:0 0 auto;background:none;border:none;color:var(--muted);
+    font-size:20px;line-height:1;cursor:pointer;padding:2px 4px}
+  .install-steps{list-style:none;counter-reset:step;padding:0;margin:4px 0 0}
+  .install-steps li{display:flex;gap:10px;align-items:flex-start;margin-bottom:12px;font-size:14.5px;line-height:1.55;color:var(--ink)}
+  .install-steps li::before{counter-increment:step;content:counter(step);flex:0 0 auto;
+    width:26px;height:26px;border-radius:50%;background:var(--accent-2);color:#fff;
+    font-size:13px;font-weight:700;font-family:var(--mono);display:flex;align-items:center;justify-content:center}
+  .install-method-title{font-size:13px;font-weight:700;color:var(--accent-2);margin:16px 0 8px}
+  .install-method-title:first-child{margin-top:4px}
+  .install-note{font-size:12.5px;color:var(--muted);line-height:1.6;margin-top:14px;
+    padding-top:12px;border-top:1px solid var(--line)}
   #toast{
     position:fixed;left:50%;bottom:30px;transform:translateX(-50%) translateY(100px);
     background:var(--ink);color:var(--paper);padding:12px 22px;border-radius:999px;
@@ -496,6 +514,11 @@
     <!-- RECORD -->
     <section class="view active" id="view-rec">
       <div id="unsupported"></div>
+      <div id="installBanner" class="install-banner" style="display:none">
+        <span class="ib-text">📲 <b>앱으로 설치</b>하면 홈 화면에서 바로 열리고, 인터넷 없이도 쓸 수 있어요.</span>
+        <button id="installBtn" class="ib-install">설치</button>
+        <button id="installDismiss" class="ib-x" aria-label="설치 안내 닫기">×</button>
+      </div>
       <div class="rec-stage">
         <div class="rec-head">
           <input class="rec-title-input" id="title" placeholder="회의 제목을 입력하세요…">
@@ -727,6 +750,15 @@
     </section>
 </div>
 <div id="toast"></div>
+<div id="installModal" class="modal-overlay" style="display:none">
+  <div class="modal-box">
+    <div class="modal-head">
+      <span id="installModalTitle">앱 설치</span>
+      <button id="installModalClose" class="modal-x">×</button>
+    </div>
+    <div id="installModalBody" class="modal-body"></div>
+  </div>
+</div>
 <div id="analyzeModal" class="modal-overlay" style="display:none">
   <div class="modal-box">
     <div class="modal-head">
@@ -772,6 +804,11 @@
           <button data-v="light">라이트</button>
           <button data-v="dark">다크</button>
         </div>
+      </div>
+      <div class="setting-block">
+        <div class="setting-label">앱 설치</div>
+        <button id="setInstallBtn" class="gen-btn" style="margin:0">📲 이 기기에 앱으로 설치</button>
+        <div id="setInstallHint" style="font-size:12px;color:var(--muted);margin-top:8px;line-height:1.5"></div>
       </div>
     </div>
   </div>
@@ -2202,6 +2239,111 @@ $("#filesExport")&&($("#filesExport").onclick=()=>{
   download("회의록_선택백업.json",JSON.stringify({meetings,folders:expFolders,memos:selMemos},null,2),"application/json");
   toast(filesSelected.size+"개 내보냈습니다");
 });
+
+/* ============ PWA: Service Worker 등록 (B방식 무음 업데이트) ============ */
+// 새 SW는 설치 후 대기(waiting)하다가 사용자가 앱을 다시 열 때 자연 활성화된다.
+// 사용자에게 "지금 새로고침?"을 묻지 않는다. file://·미지원 환경은 조용히 무시.
+if("serviceWorker" in navigator){
+  window.addEventListener("load",()=>{
+    navigator.serviceWorker.register("sw.js").then(reg=>{
+      reg.addEventListener("updatefound",()=>{
+        const sw=reg.installing;if(!sw)return;
+        sw.addEventListener("statechange",()=>{
+          if(sw.state==="installed"&&!navigator.serviceWorker.controller){
+            toast("오프라인에서도 쓸 수 있게 준비됐습니다");  // 최초 설치 완료
+          }
+        });
+      });
+    }).catch(()=>{});
+  });
+}
+
+/* ============ PWA: 기기별 설치 안내 ============ */
+function pwaDetectOS(){
+  const ua=navigator.userAgent;
+  if(/iPad|iPhone|iPod/.test(ua)&&!window.MSStream)return "ios";
+  if(/Android/i.test(ua))return "android";
+  if(/Windows/i.test(ua))return "windows";
+  if(/Mac/i.test(ua))return "mac";
+  return "other";
+}
+function pwaStandalone(){return (window.matchMedia&&window.matchMedia("(display-mode: standalone)").matches)||navigator.standalone===true}
+function pwaIOSSafari(){return pwaDetectOS()==="ios"&&!/CriOS|FxiOS|EdgiOS|OPiOS/.test(navigator.userAgent)}
+function pwaSamsung(){return /SamsungBrowser/i.test(navigator.userAgent)}
+
+let deferredPrompt=null;
+const INSTALL_DISMISS_KEY="meetnote.installDismissed.v1";
+window.addEventListener("beforeinstallprompt",e=>{e.preventDefault();deferredPrompt=e;refreshInstallUI()});
+window.addEventListener("appinstalled",()=>{deferredPrompt=null;hideInstallBanner();refreshInstallUI();toast("앱이 설치됐습니다")});
+
+function hideInstallBanner(){const b=$("#installBanner");if(b)b.style.display="none"}
+function refreshInstallUI(){
+  const installed=pwaStandalone();
+  const hint=$("#setInstallHint");
+  if(hint){
+    if(installed)hint.textContent="이미 앱으로 설치되어 실행 중입니다.";
+    else if(deferredPrompt)hint.textContent="버튼을 누르면 설치 창이 바로 열립니다.";
+    else if(pwaDetectOS()==="ios")hint.textContent="아이폰은 Safari 공유 버튼으로 설치합니다. 버튼을 누르면 방법을 보여드려요.";
+    else hint.textContent="버튼을 누르면 이 브라우저의 설치 방법을 안내합니다.";
+  }
+  const setBtn=$("#setInstallBtn");if(setBtn)setBtn.style.display=installed?"none":"";
+  const banner=$("#installBanner");if(!banner)return;
+  const dismissed=localStorage.getItem(INSTALL_DISMISS_KEY)==="1";
+  // 설치 가능(프롬프트 대기) 또는 iOS Safari·삼성인터넷(수동 설치 가능)일 때만 노출
+  const showable=!installed&&!dismissed&&(!!deferredPrompt||pwaIOSSafari()||pwaSamsung());
+  banner.style.display=showable?"flex":"none";
+}
+async function pwaInstall(){
+  if(deferredPrompt){
+    deferredPrompt.prompt();
+    try{await deferredPrompt.userChoice}catch{}
+    deferredPrompt=null;refreshInstallUI();return;
+  }
+  pwaShowInstructions();
+}
+function pwaShowInstructions(){
+  const os=pwaDetectOS();let title="앱 설치",html="";
+  if(os==="ios"){
+    title="아이폰에 설치하기";
+    html=`<p style="font-size:14px;color:var(--muted);margin-bottom:12px">아이폰은 <b>Safari</b>에서만 홈 화면 설치가 가능해요.</p>
+      <ol class="install-steps">
+        <li>화면 아래 가운데 <b>공유 버튼</b>(￪)을 누르세요.</li>
+        <li>목록을 내려 <b>“홈 화면에 추가”</b>를 누르세요.</li>
+        <li>오른쪽 위 <b>“추가”</b>를 누르면 끝!</li>
+      </ol>
+      <div class="install-note">크롬 등 다른 브라우저로 보고 있다면 Safari로 이 페이지를 다시 열어주세요.</div>`;
+  }else if(pwaSamsung()){
+    title="삼성 인터넷에 설치하기";
+    html=`<div class="install-method-title">방법 1 · 주소창 + 아이콘</div>
+      <ol class="install-steps"><li>주소창 오른쪽 <b>+</b> 아이콘을 누르세요.</li><li><b>“홈 화면”</b>을 선택하세요.</li><li><b>“추가”</b>를 누르면 완료됩니다.</li></ol>
+      <div class="install-method-title">방법 2 · ⋮ 메뉴</div>
+      <ol class="install-steps"><li>오른쪽 아래 <b>⋮</b>(더보기)를 누르세요.</li><li><b>“현재 페이지 추가” → “홈 화면”</b>을 선택하세요.</li><li><b>“추가”</b>를 누르면 완료됩니다.</li></ol>`;
+  }else if(os==="mac"){
+    title="맥에 설치하기";
+    html=`<ol class="install-steps">
+      <li>크롬·엣지는 주소창 오른쪽 <b>설치 아이콘</b>(모니터 모양)을 누르세요.</li>
+      <li>Safari는 메뉴바 <b>파일 → “Dock에 추가”</b>를 선택하세요.</li>
+      <li>이름 확인 후 <b>“추가”</b>를 누르면 Dock에서 실행됩니다.</li></ol>
+      <div class="install-note">설치 아이콘이 안 보이면 페이지를 한 번 새로고침해 보세요.</div>`;
+  }else{
+    title="앱으로 설치하기";
+    html=`<ol class="install-steps">
+      <li>주소창 오른쪽의 <b>설치 아이콘</b>(⊕ 또는 모니터 모양)을 누르세요.</li>
+      <li>또는 브라우저 <b>⋮ 메뉴 → “앱 설치” / “홈 화면에 추가”</b>를 선택하세요.</li>
+      <li>안내에 따라 <b>“설치”</b>를 누르면 완료됩니다.</li></ol>
+      <div class="install-note">크롬·엣지·삼성 인터넷에서 설치할 수 있어요. 설치하면 오프라인에서도 열립니다.</div>`;
+  }
+  $("#installModalTitle").textContent=title;
+  $("#installModalBody").innerHTML=html;
+  $("#installModal").style.display="flex";
+}
+$("#installBtn")&&($("#installBtn").onclick=pwaInstall);
+$("#installDismiss")&&($("#installDismiss").onclick=()=>{localStorage.setItem(INSTALL_DISMISS_KEY,"1");hideInstallBanner()});
+$("#setInstallBtn")&&($("#setInstallBtn").onclick=pwaInstall);
+$("#installModalClose")&&($("#installModalClose").onclick=()=>$("#installModal").style.display="none");
+$("#installModal")&&($("#installModal").onclick=e=>{if(e.target.id==="installModal")$("#installModal").style.display="none"});
+$("#settingsBtn")&&$("#settingsBtn").addEventListener("click",refreshInstallUI);
+refreshInstallUI();
 </script>
 </body>
 </html>

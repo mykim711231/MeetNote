@@ -2,6 +2,7 @@
   "name": "회의록 · MeetNote",
   "short_name": "회의록",
   "description": "브라우저만으로 동작하는 무료·로컬·오프라인 회의록 앱",
+  "id": "./",
   "start_url": "./meetnote.html",
   "scope": "./",
   "display": "standalone",
