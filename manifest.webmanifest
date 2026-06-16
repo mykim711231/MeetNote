@@ -1,0 +1,17 @@
+{
+  "name": "회의록 · MeetNote",
+  "short_name": "회의록",
+  "description": "브라우저만으로 동작하는 무료·로컬·오프라인 회의록 앱",
+  "start_url": "./meetnote.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "lang": "ko-KR",
+  "background_color": "#0F1A2E",
+  "theme_color": "#0F1A2E",
+  "icons": [
+    { "src": "assets/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "assets/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "assets/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}
