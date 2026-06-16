@@ -93,6 +93,22 @@ export default function MeetingDetail(): JSX.Element {
     };
   }, [meeting?.id, meeting?.hasAudio, meeting?.title, meeting?.date]);
 
+  // 키보드 단축키: Space=재생/정지, ←/→=5초 이동 (입력 포커스 중엔 무시)
+  useEffect(() => {
+    if (!meeting?.hasAudio) return;
+    const onKey = (e: KeyboardEvent) => {
+      const t = e.target as HTMLElement | null;
+      if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT' || t.isContentEditable)) return;
+      const a = audioRef.current;
+      if (!a || !audioUrl) return;
+      if (e.code === 'Space') { e.preventDefault(); if (a.paused) void a.play(); else a.pause(); }
+      else if (e.code === 'ArrowLeft') { a.currentTime = Math.max(0, a.currentTime - 5); }
+      else if (e.code === 'ArrowRight') { a.currentTime = Math.min(Number.isFinite(a.duration) ? a.duration : a.currentTime + 5, a.currentTime + 5); }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [meeting?.hasAudio, audioUrl]);
+
   const summary = useMemo(() => (meeting ? summarize(meeting.segments) : []), [meeting]);
   const todos = useMemo(() => (meeting ? extractTodos(meeting.segments) : []), [meeting]);
   const shares = useMemo(() => (meeting ? talkShares(meeting.segments) : []), [meeting]);
