@@ -34,10 +34,15 @@ export function toPlainText(m: MeetingMeta): string {
   return lines.join('\n');
 }
 
+/** 마크다운 구조 문자 중화 (제목·발언자 같은 짧은 필드의 인젝션 방지) */
+function mdInline(s: string): string {
+  return (s || '').replace(/\r?\n/g, ' ').replace(/([#*_`[\]<>])/g, '\\$1');
+}
+
 /** 마크다운(.md) — 요약·할일 포함 */
 export function toMarkdown(m: MeetingMeta): string {
   const out: string[] = [];
-  out.push(`# ${m.title || '제목 없음'}`);
+  out.push(`# ${mdInline(m.title) || '제목 없음'}`);
   out.push('');
   out.push(`- 일시: ${fmtDate(m.date)}`);
   out.push(`- 길이: ${fmtDuration(m.duration)}`);
@@ -53,13 +58,13 @@ export function toMarkdown(m: MeetingMeta): string {
   const todos = extractTodos(m.segments);
   if (todos.length) {
     out.push('## 할 일');
-    for (const t of todos) out.push(`- [ ] ${t.text} _(${t.who})_`);
+    for (const t of todos) out.push(`- [ ] ${t.text} _(${mdInline(t.who)})_`);
     out.push('');
   }
 
   out.push('## 전문');
   for (const s of m.segments) {
-    out.push(`**[${fmtTime(s.ts)}] ${s.who}:** ${s.text}`);
+    out.push(`**[${fmtTime(s.ts)}] ${mdInline(s.who)}:** ${s.text}`);
     out.push('');
   }
   return out.join('\n');
@@ -84,11 +89,16 @@ function base64ToBlob(b64: string, type: string): Blob {
 }
 
 /** 전체 백업 파일 생성 (메타 + 오디오 base64)
- *  순차 처리로 한 번에 오디오 1개분만 메모리에 올려 대용량에서 OOM을 방지한다. */
-export async function buildBackup(folders: Folder[]): Promise<BackupFile> {
+ *  순차 처리로 한 번에 오디오 1개분만 메모리에 올려 대용량에서 OOM을 방지한다.
+ *  includeAudio=false면 텍스트만 백업(가볍고 빠름) — 복원본은 오디오 없는 회의록이 된다. */
+export async function buildBackup(folders: Folder[], includeAudio = true): Promise<BackupFile> {
   const metas = await listMeetings();
   const meetings: BackupFile['meetings'] = [];
   for (const meta of metas) {
+    if (!includeAudio) {
+      meetings.push({ meta: { ...meta, hasAudio: false }, audioBase64: null });
+      continue;
+    }
     const audio = meta.hasAudio ? await getAudio(meta.id) : undefined;
     meetings.push({ meta, audioBase64: audio ? await blobToBase64(audio) : null });
   }

@@ -6,6 +6,7 @@ import { useMeetingStore } from '@/stores/useMeetingStore';
 import { estimateUsage, requestPersist, isPersisted } from '@/lib/db';
 import { buildBackup, restoreBackup, downloadBlob } from '@/lib/export';
 import { toast } from '@/stores/useToastStore';
+import { confirmDialog } from '@/stores/useConfirmStore';
 import { fmtBytes } from '@/lib/format';
 import InstallPrompt from '@/components/InstallPrompt';
 import type { BackupFile } from '@/types';
@@ -30,12 +31,21 @@ export default function SettingsView(): JSX.Element {
     toast(ok ? '영속 저장이 활성화되었습니다.' : '브라우저가 영속 저장을 거부했습니다.', ok ? 'success' : 'error');
   };
 
-  const onExport = async () => {
+  const onExport = async (includeAudio: boolean) => {
+    // 오디오 포함 + 사용량이 크면 시간/용량 경고
+    if (includeAudio && usage && usage.usage > 50 * 1024 * 1024) {
+      const ok = await confirmDialog({
+        message: `오디오 포함 백업은 약 ${fmtBytes(usage.usage)}로 큽니다.\n시간이 걸릴 수 있어요. 계속할까요?`,
+        confirmLabel: '계속',
+      });
+      if (!ok) return;
+    }
     setBusy(true);
     try {
-      const backup = await buildBackup(folders);
+      const backup = await buildBackup(folders, includeAudio);
       const stamp = new Date().toISOString().slice(0, 10);
-      downloadBlob(new Blob([JSON.stringify(backup)], { type: 'application/json' }), `meetnote-backup-${stamp}.json`);
+      const suffix = includeAudio ? '' : '-text';
+      downloadBlob(new Blob([JSON.stringify(backup)], { type: 'application/json' }), `meetnote-backup${suffix}-${stamp}.json`);
       toast('백업 파일을 내보냈습니다.', 'success');
     } catch {
       toast('백업 생성 실패', 'error');
@@ -139,13 +149,16 @@ export default function SettingsView(): JSX.Element {
           모든 회의록과 오디오를 하나의 JSON 파일로 저장하거나 복원합니다. 기기 변경·초기화 전에 꼭 백업하세요.
         </p>
         <div className="flex gap-2 mt-1">
-          <button type="button" onClick={onExport} disabled={busy} className="flex-1 flex items-center justify-center gap-2 rounded-full bg-primary text-white text-sm font-semibold py-2.5 disabled:opacity-50">
-            <Download size={16} /> 백업 내보내기
+          <button type="button" onClick={() => void onExport(true)} disabled={busy} className="flex-1 flex items-center justify-center gap-2 rounded-full bg-primary text-white text-sm font-semibold py-2.5 disabled:opacity-50">
+            <Download size={16} /> 전체 백업
           </button>
           <button type="button" onClick={() => fileRef.current?.click()} disabled={busy} className="flex-1 flex items-center justify-center gap-2 rounded-full border border-divider text-fg text-sm font-semibold py-2.5 disabled:opacity-50">
             <Upload size={16} /> 복원
           </button>
         </div>
+        <button type="button" onClick={() => void onExport(false)} disabled={busy} className="w-full flex items-center justify-center gap-2 rounded-full border border-divider text-muted text-xs font-medium py-2 disabled:opacity-50">
+          텍스트만 백업 (오디오 제외 · 가벼움)
+        </button>
         <input
           ref={fileRef}
           type="file"
