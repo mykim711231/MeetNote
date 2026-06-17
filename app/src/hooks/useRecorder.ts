@@ -16,6 +16,35 @@ export interface RecorderResult {
   segments: Segment[];
 }
 
+/** getUserMedia/getDisplayMedia 오류를 사용자용 한국어 메시지로 변환 */
+function mediaErrorMessage(e: unknown, source: RecSource): string {
+  const name = (e as DOMException)?.name ?? '';
+  const msg = (e as DOMException)?.message ?? '';
+  const sysShare = source === 'system' || source === 'both';
+  switch (name) {
+    case 'NotAllowedError':
+    case 'SecurityError':
+      return source === 'system'
+        ? '화면/소리 공유가 취소되었거나 거부되었습니다.'
+        : sysShare
+          ? '마이크 또는 화면 공유 권한이 거부되었습니다.'
+          : '마이크 권한이 거부되었습니다. 브라우저 설정에서 허용해 주세요.';
+    case 'NotFoundError':
+    case 'DevicesNotFoundError':
+    case 'OverconstrainedError':
+      return source === 'system'
+        ? '공유할 오디오를 찾지 못했습니다. 공유 창에서 “소리 공유”를 켜세요.'
+        : '마이크를 찾을 수 없습니다. 마이크가 연결돼 있는지 확인해 주세요.';
+    case 'NotReadableError':
+    case 'AbortError':
+      return '마이크를 사용할 수 없습니다. 다른 앱이 사용 중일 수 있어요.';
+    case 'NotSupportedError':
+      return msg || '이 기기는 해당 녹음 방식을 지원하지 않습니다.';
+    default:
+      return '녹음을 시작할 수 없습니다. 마이크 연결과 권한을 확인해 주세요.';
+  }
+}
+
 /** MediaRecorder가 지원하는 mime 선택 (Chrome=webm, Safari=mp4) */
 function pickMime(): string {
   const candidates = [
@@ -186,13 +215,7 @@ export function useRecorder() {
       displayStreamRef.current?.getTracks().forEach((t) => t.stop()); displayStreamRef.current = null;
       if (audioCtxRef.current) { void audioCtxRef.current.close().catch(() => {}); audioCtxRef.current = null; }
       analyserRef.current = null;
-      const name = (e as DOMException)?.name ?? '';
-      const msg = (e as DOMException)?.message;
-      setError(
-        name === 'NotAllowedError'
-          ? (source === 'mic' ? '마이크 권한이 거부되었습니다. 브라우저 설정에서 허용해 주세요.' : '화면/소리 공유가 취소되었거나 거부되었습니다.')
-          : (msg || '오디오 소스를 사용할 수 없습니다. (장치 없음 또는 점유 중)')
-      );
+      setError(mediaErrorMessage(e, source));
       startingRef.current = false;
       return;
     }
