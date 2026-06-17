@@ -43,7 +43,6 @@ export function useRecorder() {
   const streamRef = useRef<MediaStream | null>(null);
   const micStreamRef = useRef<MediaStream | null>(null);     // 'both' 분리 정리용
   const displayStreamRef = useRef<MediaStream | null>(null); // 시스템 소리 트랙
-  const mixCtxRef = useRef<AudioContext | null>(null);       // 'both' 믹스 컨텍스트
   const mediaRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<BlobPart[]>([]);
   const mimeRef = useRef('');
@@ -126,11 +125,12 @@ export function useRecorder() {
 
     const useMic = source === 'mic' || source === 'both';
     const useSystem = source === 'system' || source === 'both';
+    const denoise = usePrefStore.getState().denoise;
     let stream: MediaStream;
     try {
       if (useMic) {
         micStreamRef.current = await navigator.mediaDevices.getUserMedia({
-          audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
+          audio: { echoCancellation: true, noiseSuppression: denoise, autoGainControl: denoise },
         });
       }
       if (useSystem) {
@@ -142,14 +142,31 @@ export function useRecorder() {
         }
         displayStreamRef.current = new MediaStream(disp.getAudioTracks());
       }
-      if (source === 'both') {
+      // 믹스('both')거나 노이즈 감소(denoise)면 AudioContext 처리 그래프를 거쳐 녹음.
+      // denoise: 각 소스에 하이패스(85Hz) 필터로 저주파 험·웅웅거림 제거. 메터도 같은 컨텍스트에서 탭.
+      const needsGraph = source === 'both' || denoise;
+      if (needsGraph) {
         const Ctx = window.AudioContext ?? (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
         const ctx = new Ctx();
-        mixCtxRef.current = ctx;
-        await ctx.resume().catch(() => {}); // suspended 상태로 시작 시 믹스 무음 방지
+        audioCtxRef.current = ctx;
+        await ctx.resume().catch(() => {}); // suspended 상태로 시작 시 무음 방지
         const dest = ctx.createMediaStreamDestination();
-        ctx.createMediaStreamSource(micStreamRef.current!).connect(dest);
-        ctx.createMediaStreamSource(displayStreamRef.current!).connect(dest);
+        const analyser = ctx.createAnalyser();
+        analyser.fftSize = 512;
+        const inputs = [micStreamRef.current, displayStreamRef.current].filter((s): s is MediaStream => !!s);
+        for (const s of inputs) {
+          let node: AudioNode = ctx.createMediaStreamSource(s);
+          if (denoise) {
+            const hp = ctx.createBiquadFilter();
+            hp.type = 'highpass';
+            hp.frequency.value = 85;
+            node.connect(hp);
+            node = hp;
+          }
+          node.connect(dest);
+          node.connect(analyser);
+        }
+        analyserRef.current = analyser;
         stream = dest.stream;
       } else if (source === 'system') {
         stream = displayStreamRef.current!;
@@ -160,7 +177,8 @@ export function useRecorder() {
       // 부분 취득 정리
       micStreamRef.current?.getTracks().forEach((t) => t.stop()); micStreamRef.current = null;
       displayStreamRef.current?.getTracks().forEach((t) => t.stop()); displayStreamRef.current = null;
-      if (mixCtxRef.current) { void mixCtxRef.current.close().catch(() => {}); mixCtxRef.current = null; }
+      if (audioCtxRef.current) { void audioCtxRef.current.close().catch(() => {}); audioCtxRef.current = null; }
+      analyserRef.current = null;
       const name = (e as DOMException)?.name ?? '';
       const msg = (e as DOMException)?.message;
       setError(
@@ -194,18 +212,20 @@ export function useRecorder() {
       );
     }
 
-    // 레벨 미터
-    try {
-      const Ctx = window.AudioContext ?? (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
-      const ctx = new Ctx();
-      audioCtxRef.current = ctx; // resume() 실패 시에도 teardown이 close() 할 수 있도록 먼저 저장
-      await ctx.resume();
-      const src = ctx.createMediaStreamSource(stream);
-      const analyser = ctx.createAnalyser();
-      analyser.fftSize = 512;
-      src.connect(analyser);
-      analyserRef.current = analyser;
-    } catch { /* 레벨 미터 없이도 동작 */ }
+    // 레벨 미터 — 처리 그래프(denoise/both)에서 이미 만들었으면 건너뜀
+    if (!analyserRef.current) {
+      try {
+        const Ctx = window.AudioContext ?? (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+        const ctx = new Ctx();
+        audioCtxRef.current = ctx; // resume() 실패 시에도 teardown이 close() 할 수 있도록 먼저 저장
+        await ctx.resume();
+        const src = ctx.createMediaStreamSource(stream);
+        const analyser = ctx.createAnalyser();
+        analyser.fftSize = 512;
+        src.connect(analyser);
+        analyserRef.current = analyser;
+      } catch { /* 레벨 미터 없이도 동작 */ }
+    }
 
     // MediaRecorder
     const mime = pickMime();
@@ -227,7 +247,6 @@ export function useRecorder() {
       stream.getTracks().forEach((t) => t.stop());
       micStreamRef.current?.getTracks().forEach((t) => t.stop()); micStreamRef.current = null;
       displayStreamRef.current?.getTracks().forEach((t) => t.stop()); displayStreamRef.current = null;
-      if (mixCtxRef.current) { void mixCtxRef.current.close().catch(() => {}); mixCtxRef.current = null; }
       if (audioCtxRef.current) { void audioCtxRef.current.close().catch(() => {}); audioCtxRef.current = null; }
       analyserRef.current = null;
       startingRef.current = false;
@@ -291,10 +310,6 @@ export function useRecorder() {
     micStreamRef.current = null;
     displayStreamRef.current?.getTracks().forEach((t) => t.stop());
     displayStreamRef.current = null;
-    if (mixCtxRef.current) {
-      void mixCtxRef.current.close().catch(() => {});
-      mixCtxRef.current = null;
-    }
     if (audioCtxRef.current) {
       void audioCtxRef.current.close().catch(() => {});
       audioCtxRef.current = null;
@@ -380,7 +395,6 @@ export function useRecorder() {
     streamRef.current?.getTracks().forEach((t) => t.stop());
     micStreamRef.current?.getTracks().forEach((t) => t.stop());
     displayStreamRef.current?.getTracks().forEach((t) => t.stop());
-    if (mixCtxRef.current) void mixCtxRef.current.close().catch(() => {});
     if (audioCtxRef.current) void audioCtxRef.current.close().catch(() => {});
   }, [stopLoop]);
 

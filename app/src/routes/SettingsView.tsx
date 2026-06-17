@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
 import {
-  HardDrive, ShieldCheck, FolderPlus, Trash2, Download, Upload, Info, Plus,
+  HardDrive, ShieldCheck, FolderPlus, Trash2, Download, Upload, Info, Plus, Waves,
 } from 'lucide-react';
 import { useMeetingStore } from '@/stores/useMeetingStore';
+import { usePrefStore } from '@/stores/usePrefStore';
 import { estimateUsage, requestPersist, isPersisted, clearAllData } from '@/lib/db';
 import { buildBackup, restoreBackup, downloadBlob, buildCombinedMarkdown } from '@/lib/export';
 import { toast } from '@/stores/useToastStore';
@@ -15,6 +16,7 @@ import type { BackupFile } from '@/types';
 export default function SettingsView(): JSX.Element {
   const { folders, addFolder, removeFolder, meetings, load } = useMeetingStore();
   const { rec } = useRecorderContext();
+  const { denoise, setDenoise } = usePrefStore();
   const [persisted, setPersisted] = useState(false);
   const [usage, setUsage] = useState<{ usage: number; quota: number } | null>(null);
   const [newFolder, setNewFolder] = useState('');
@@ -133,6 +135,26 @@ export default function SettingsView(): JSX.Element {
           영속 저장을 켜면 브라우저가 공간 부족 시 데이터를 임의로 지우지 않습니다.
           개인 기기에만 저장되므로, 중요한 회의록은 아래에서 정기적으로 백업하세요.
         </p>
+      </Section>
+
+      {/* 녹음 */}
+      <Section title="녹음" Icon={Waves}>
+        <Row>
+          <div className="pr-3">
+            <p className="text-sm text-fg">노이즈 감소</p>
+            <p className="text-xs text-muted leading-relaxed">배경 잡음과 저주파 험(웅웅거림)을 줄입니다. 권장.</p>
+          </div>
+          <button
+            type="button"
+            role="switch"
+            aria-checked={denoise}
+            aria-label="노이즈 감소"
+            onClick={() => setDenoise(!denoise)}
+            className={`flex-none w-11 h-6 rounded-full relative transition-colors ${denoise ? 'bg-primary' : 'bg-divider'}`}
+          >
+            <span className={`absolute top-0.5 w-5 h-5 rounded-full bg-white shadow transition-all ${denoise ? 'left-[22px]' : 'left-0.5'}`} />
+          </button>
+        </Row>
       </Section>
 
       {/* 폴더 */}

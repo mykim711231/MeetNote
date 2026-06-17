@@ -13,14 +13,16 @@ interface PrefState {
   theme: Theme;
   fontScale: number;        // 0.9 ~ 1.4
   sttLang: string;          // 실시간 자막 인식 언어
+  denoise: boolean;         // 녹음 노이즈 감소
   toggleTheme: () => void;
   setFontScale: (v: number) => void;
   setSttLang: (lang: string) => void;
+  setDenoise: (v: boolean) => void;
 }
 
 const PREF_KEY = 'meetnote.prefs.v1';
 
-interface Stored { theme: Theme; fontScale: number; sttLang: string }
+interface Stored { theme: Theme; fontScale: number; sttLang: string; denoise: boolean }
 
 function load(): Stored {
   try {
@@ -31,11 +33,12 @@ function load(): Stored {
         theme: p.theme === 'dark' ? 'dark' : 'light',
         fontScale: typeof p.fontScale === 'number' ? p.fontScale : 1,
         sttLang: typeof p.sttLang === 'string' ? p.sttLang : 'ko-KR',
+        denoise: typeof p.denoise === 'boolean' ? p.denoise : true,
       };
     }
   } catch { /* noop */ }
   const prefersDark = window.matchMedia?.('(prefers-color-scheme: dark)').matches ?? false;
-  return { theme: prefersDark ? 'dark' : 'light', fontScale: 1, sttLang: 'ko-KR' };
+  return { theme: prefersDark ? 'dark' : 'light', fontScale: 1, sttLang: 'ko-KR', denoise: true };
 }
 
 function persist(s: Stored): void {
@@ -60,23 +63,29 @@ export const usePrefStore = create<PrefState>((set, get) => ({
   theme: initial.theme,
   fontScale: initial.fontScale,
   sttLang: initial.sttLang,
+  denoise: initial.denoise,
   toggleTheme: () =>
     set((s) => {
       const theme: Theme = s.theme === 'dark' ? 'light' : 'dark';
       applyPrefs(theme, s.fontScale);
-      persist({ theme, fontScale: s.fontScale, sttLang: s.sttLang });
+      persist({ theme, fontScale: s.fontScale, sttLang: s.sttLang, denoise: s.denoise });
       return { theme };
     }),
   setFontScale: (v) =>
     set((s) => {
       const fontScale = Math.min(1.4, Math.max(0.9, Math.round(v * 100) / 100));
       applyPrefs(s.theme, fontScale);
-      persist({ theme: s.theme, fontScale, sttLang: s.sttLang });
+      persist({ theme: s.theme, fontScale, sttLang: s.sttLang, denoise: s.denoise });
       return { fontScale };
     }),
   setSttLang: (lang) => {
-    const { theme, fontScale } = get();
-    persist({ theme, fontScale, sttLang: lang });
+    const { theme, fontScale, denoise } = get();
+    persist({ theme, fontScale, sttLang: lang, denoise });
     set({ sttLang: lang });
+  },
+  setDenoise: (v) => {
+    const { theme, fontScale, sttLang } = get();
+    persist({ theme, fontScale, sttLang, denoise: v });
+    set({ denoise: v });
   },
 }));
