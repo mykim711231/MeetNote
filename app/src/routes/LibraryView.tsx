@@ -59,6 +59,18 @@ export default function LibraryView(): JSX.Element {
 
   const needle = q.trim();
 
+  const stats = useMemo(() => {
+    const totalMs = meetings.reduce((a, m) => a + m.duration, 0);
+    const weekAgo = Date.now() - 7 * 24 * 3600 * 1000;
+    const thisWeek = meetings.filter((m) => {
+      const t = new Date(m.date).getTime();
+      return Number.isFinite(t) && t >= weekAgo;
+    }).length;
+    return { total: meetings.length, totalMs, thisWeek };
+  }, [meetings]);
+
+  const showStats = loaded && meetings.length > 0 && !needle && folderId === 'all';
+
   return (
     <div className="flex flex-col h-full">
       {/* 검색 */}
@@ -98,6 +110,24 @@ export default function LibraryView(): JSX.Element {
       {/* 결과 개수 */}
       {loaded && meetings.length > 0 && (
         <div className="flex-none px-4 pt-2 text-xs text-muted">{filtered.length}건</div>
+      )}
+
+      {/* 통계 */}
+      {showStats && (
+        <div className="flex-none px-4 pt-3">
+          <div className="grid grid-cols-3 rounded-2xl bg-surface border border-divider divide-x divide-divider">
+            {[
+              { label: '회의록', value: `${stats.total}건` },
+              { label: '총 시간', value: fmtDuration(stats.totalMs) },
+              { label: '이번 주', value: `${stats.thisWeek}건` },
+            ].map((c) => (
+              <div key={c.label} className="py-2.5 text-center">
+                <div className="text-base font-bold text-fg tabular-nums">{c.value}</div>
+                <div className="text-xs text-muted mt-0.5">{c.label}</div>
+              </div>
+            ))}
+          </div>
+        </div>
       )}
 
       {/* 목록 */}
