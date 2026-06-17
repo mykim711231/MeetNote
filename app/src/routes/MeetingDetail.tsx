@@ -14,6 +14,7 @@ import {
 import { toast } from '@/stores/useToastStore';
 import { confirmDialog } from '@/stores/useConfirmStore';
 import { fmtTime, fmtDate, fmtDuration } from '@/lib/format';
+import { getPlayPos, setPlayPos, clearPlayPos } from '@/lib/playpos';
 import { speakerColor, talkShares } from '@/lib/speakers';
 import type { MeetingMeta } from '@/types';
 
@@ -31,6 +32,7 @@ export default function MeetingDetail(): JSX.Element {
   const [tab, setTab] = useState<DetailTab>('transcript');
 
   const audioRef = useRef<HTMLAudioElement>(null);
+  const lastPosSaveRef = useRef(0);
   const [playing, setPlaying] = useState(false);
   const [curMs, setCurMs] = useState(0);
   const [speedIdx, setSpeedIdx] = useState(0);
@@ -192,6 +194,7 @@ export default function MeetingDetail(): JSX.Element {
     if (!ok) return;
     const snapshot: MeetingMeta = { ...meeting, segments: meeting.segments };
     const blob = meeting.hasAudio ? (await getAudio(meeting.id)) ?? null : null;
+    clearPlayPos(meeting.id);
     await remove(meeting.id);
     navigate('/library');
     toast('삭제되었습니다.', 'info', {
@@ -282,10 +285,23 @@ export default function MeetingDetail(): JSX.Element {
           <audio
             ref={audioRef}
             src={audioUrl ?? undefined}
+            onLoadedMetadata={(e) => {
+              const pos = getPlayPos(meeting.id);
+              const durMs = e.currentTarget.duration * 1000;
+              if (pos > 0 && Number.isFinite(durMs) && pos < durMs - 3000) {
+                e.currentTarget.currentTime = pos / 1000;
+                setCurMs(pos);
+              }
+            }}
             onPlay={() => setPlaying(true)}
-            onPause={() => setPlaying(false)}
-            onEnded={() => setPlaying(false)}
-            onTimeUpdate={(e) => setCurMs(e.currentTarget.currentTime * 1000)}
+            onPause={() => { setPlaying(false); setPlayPos(meeting.id, curMs); }}
+            onEnded={() => { setPlaying(false); clearPlayPos(meeting.id); }}
+            onTimeUpdate={(e) => {
+              const ms = e.currentTarget.currentTime * 1000;
+              setCurMs(ms);
+              const now = e.timeStamp;
+              if (now - lastPosSaveRef.current > 3000) { lastPosSaveRef.current = now; setPlayPos(meeting.id, ms); }
+            }}
             preload="metadata"
           />
         </div>
