@@ -165,6 +165,13 @@ function base64ToBlob(b64: string, type: string): Blob {
   return new Blob([bytes], { type });
 }
 
+/** 모든 회의록을 하나의 마크다운으로 합본 */
+export async function buildCombinedMarkdown(): Promise<string> {
+  const metas = await listMeetings();
+  if (metas.length === 0) return '# MeetNote 회의록\n\n저장된 회의록이 없습니다.\n';
+  return `# MeetNote 회의록 (${metas.length}건)\n\n` + metas.map((m) => toMarkdown(m)).join('\n\n---\n\n') + '\n';
+}
+
 /** 전체 백업 파일 생성 (메타 + 오디오 base64)
  *  순차 처리로 한 번에 오디오 1개분만 메모리에 올려 대용량에서 OOM을 방지한다.
  *  includeAudio=false면 텍스트만 백업(가볍고 빠름) — 복원본은 오디오 없는 회의록이 된다. */

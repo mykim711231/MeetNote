@@ -4,7 +4,7 @@
 //   audio:<id>  → Blob (재생 시에만 로드)
 //   index       → number[] (회의 id 목록, 최신순)
 
-import { get, set, del, keys, createStore } from 'idb-keyval';
+import { get, set, del, keys, clear, createStore } from 'idb-keyval';
 import type { MeetingMeta, Segment } from '@/types';
 
 const store = createStore('meetnote-db', 'kv');
@@ -92,6 +92,19 @@ export async function isPersisted(): Promise<boolean> {
 /** 디버그/백업용: 전체 키 수 */
 export async function allKeys(): Promise<IDBValidKey[]> {
   return keys(store);
+}
+
+/** 모든 IndexedDB 데이터 삭제 + meetnote.* localStorage 키 제거 */
+export async function clearAllData(): Promise<void> {
+  await clear(store);
+  try {
+    const toRemove: string[] = [];
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i);
+      if (k && k.startsWith('meetnote.')) toRemove.push(k);
+    }
+    toRemove.forEach((k) => localStorage.removeItem(k));
+  } catch { /* noop */ }
 }
 
 // ── 녹음 크래시 복구용 드래프트 ──

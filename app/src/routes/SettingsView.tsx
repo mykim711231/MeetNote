@@ -3,8 +3,8 @@ import {
   HardDrive, ShieldCheck, FolderPlus, Trash2, Download, Upload, Info, Plus,
 } from 'lucide-react';
 import { useMeetingStore } from '@/stores/useMeetingStore';
-import { estimateUsage, requestPersist, isPersisted } from '@/lib/db';
-import { buildBackup, restoreBackup, downloadBlob } from '@/lib/export';
+import { estimateUsage, requestPersist, isPersisted, clearAllData } from '@/lib/db';
+import { buildBackup, restoreBackup, downloadBlob, buildCombinedMarkdown } from '@/lib/export';
 import { toast } from '@/stores/useToastStore';
 import { confirmDialog } from '@/stores/useConfirmStore';
 import { fmtBytes } from '@/lib/format';
@@ -76,6 +76,28 @@ export default function SettingsView(): JSX.Element {
       setBusy(false);
       if (fileRef.current) fileRef.current.value = '';
     }
+  };
+
+  const onCombined = async () => {
+    setBusy(true);
+    try {
+      const md = await buildCombinedMarkdown();
+      const stamp = new Date().toISOString().slice(0, 10);
+      downloadBlob(new Blob([md], { type: 'text/markdown;charset=utf-8' }), `meetnote-all-${stamp}.md`);
+      toast('합본을 내보냈습니다.', 'success');
+    } catch {
+      toast('내보내기 실패', 'error');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const onClearAll = async () => {
+    const ok = await confirmDialog({ message: '모든 회의록·메모·설정을 삭제합니다.\n되돌릴 수 없습니다. 계속할까요?', confirmLabel: '전체 삭제', danger: true });
+    if (!ok) return;
+    await clearAllData();
+    toast('모든 데이터를 삭제했습니다.');
+    setTimeout(() => window.location.reload(), 600);
   };
 
   const usedPct = usage && usage.quota > 0 ? Math.min(100, (usage.usage / usage.quota) * 100) : 0;
@@ -167,6 +189,9 @@ export default function SettingsView(): JSX.Element {
         <button type="button" onClick={() => void onExport(false)} disabled={busy} className="w-full flex items-center justify-center gap-2 rounded-full border border-divider text-muted text-xs font-medium py-2 disabled:opacity-50">
           텍스트만 백업 (오디오 제외 · 가벼움)
         </button>
+        <button type="button" onClick={() => void onCombined()} disabled={busy} className="w-full flex items-center justify-center gap-2 rounded-full border border-divider text-muted text-xs font-medium py-2 disabled:opacity-50">
+          모든 회의록 합본 (.md)
+        </button>
         <input
           ref={fileRef}
           type="file"
@@ -187,6 +212,17 @@ export default function SettingsView(): JSX.Element {
           녹음·자막·요약·저장 모두 오프라인에서 처리됩니다. 실시간 자막은 Chrome·Edge에서 가장 잘 동작합니다.
         </p>
       </Section>
+
+      {/* 위험 구역 */}
+      <section className="space-y-2 pb-2">
+        <h2 className="flex items-center gap-1.5 text-sm font-bold text-accent uppercase tracking-wide">
+          <Trash2 size={15} /> 데이터 초기화
+        </h2>
+        <p className="text-xs text-muted leading-relaxed">삭제 전 위에서 백업을 권장합니다.</p>
+        <button type="button" onClick={() => void onClearAll()} disabled={busy} className="w-full rounded-full border border-accent text-accent text-sm font-semibold py-2.5 disabled:opacity-50">
+          모든 데이터 삭제
+        </button>
+      </section>
     </div>
   );
 }
