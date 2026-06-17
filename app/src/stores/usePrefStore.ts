@@ -33,12 +33,13 @@ function load(): Stored {
         theme: p.theme === 'dark' ? 'dark' : 'light',
         fontScale: typeof p.fontScale === 'number' ? p.fontScale : 1,
         sttLang: typeof p.sttLang === 'string' ? p.sttLang : 'ko-KR',
-        denoise: typeof p.denoise === 'boolean' ? p.denoise : true,
+        denoise: typeof p.denoise === 'boolean' ? p.denoise : false,
       };
     }
   } catch { /* noop */ }
   const prefersDark = window.matchMedia?.('(prefers-color-scheme: dark)').matches ?? false;
-  return { theme: prefersDark ? 'dark' : 'light', fontScale: 1, sttLang: 'ko-KR', denoise: true };
+  // 기본 꺼짐: 회의·주변음(먼 화자·TV 등)을 그대로 담기 위해. 가까운 1:1은 설정에서 켜기.
+  return { theme: prefersDark ? 'dark' : 'light', fontScale: 1, sttLang: 'ko-KR', denoise: false };
 }
 
 function persist(s: Stored): void {

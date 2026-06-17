@@ -142,7 +142,10 @@ export default function SettingsView(): JSX.Element {
         <Row>
           <div className="pr-3">
             <p className="text-sm text-fg">노이즈 감소</p>
-            <p className="text-xs text-muted leading-relaxed">배경 잡음과 저주파 험(웅웅거림)을 줄입니다. 권장.</p>
+            <p className="text-xs text-muted leading-relaxed">
+              <b>끔(권장)</b>: 회의·먼 화자·TV 등 방 안의 소리를 그대로 담아요.<br />
+              켜면 가까운 1:1에서 배경 잡음을 줄이지만, 멀거나 주변 소리는 약해질 수 있어요.
+            </p>
           </div>
           <button
             type="button"
