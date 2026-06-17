@@ -39,9 +39,20 @@ npx cap sync ios           # 웹 자산 + 플러그인 동기화
 
 백그라운드 녹음을 원하면 **Signing & Capabilities → Background Modes → Audio** 체크 (또는 Info.plist `UIBackgroundModes`에 `audio`).
 
+### 커스텀 플러그인: 파일 자동 전사 (FileTranscribe)
+가져온/녹음한 오디오를 **온디바이스로 받아쓰기**하는 네이티브 플러그인입니다. (SFSpeechURLRecognitionRequest)
+
+1. Xcode 프로젝트 네비게이터에서 `App/App` 폴더에 **`app/native/ios/FileTranscribePlugin.swift`** 를 드래그&드롭
+   - "Copy items if needed" 체크, **Target: App** 체크
+2. (위 Info.plist 권한이 있으면 추가 설정 불필요 — `NSSpeechRecognitionUsageDescription` 필수)
+3. 빌드하면 `registerPlugin('FileTranscribe')`(`src/lib/fileTranscribe.ts`)와 자동 연결됨
+
+> 동작: 상세 화면에서 **자동 전사(받아쓰기)** 버튼 → 권한 요청 → 온디바이스 전사 → 문장 단위 자막 저장.
+> 웹에서는 이 버튼이 보이지 않습니다(iOS 전용 엔진).
+
 ### Xcode 설정
 - **Signing & Capabilities** → Team 선택(개인 계정 가능)
-- **Deployment Target**: iOS 14.3 이상 (WKWebView MediaRecorder 지원 하한)
+- **Deployment Target**: iOS 14.3 이상 (WKWebView MediaRecorder), 온디바이스 전사는 iOS 13+ / 권장 16+(문장부호)
 
 ---
 

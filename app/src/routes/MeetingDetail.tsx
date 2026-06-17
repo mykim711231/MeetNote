@@ -2,10 +2,12 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import {
   ArrowLeft, Play, Pause, Trash2, Download, FileText, FileCode,
-  FileJson, Music, Gauge, Pencil, Copy, Share2, Printer, Pin,
+  FileJson, Music, Gauge, Pencil, Copy, Share2, Printer, Pin, Sparkles, Loader2,
 } from 'lucide-react';
+import { Capacitor } from '@capacitor/core';
 import { getMeeting, getAudio } from '@/lib/db';
 import { useMeetingStore } from '@/stores/useMeetingStore';
+import { usePrefStore } from '@/stores/usePrefStore';
 import { summarize, extractTodos } from '@/lib/summarize';
 import {
   downloadBlob, safeFilename, toPlainText, toMarkdown,
@@ -39,6 +41,9 @@ export default function MeetingDetail(): JSX.Element {
   const [speedIdx, setSpeedIdx] = useState(0);
   const [editing, setEditing] = useState(false);
   const [noteDraft, setNoteDraft] = useState<string | null>(null);
+  const [transcribing, setTranscribing] = useState(false);
+  const sttLang = usePrefStore((s) => s.sttLang);
+  const isNative = Capacitor.isNativePlatform();
 
   const mid = Number(id);
 
@@ -194,6 +199,26 @@ export default function MeetingDetail(): JSX.Element {
   const deleteSegment = (i: number) => mutate((m) => ({ ...m, segments: m.segments.filter((_, idx) => idx !== i) }));
   const onTogglePin = () => mutate((m) => ({ ...m, pinned: !m.pinned }));
 
+  const onAutoTranscribe = async () => {
+    const blob = await getAudio(meeting.id);
+    if (!blob) { toast('오디오가 없습니다.', 'error'); return; }
+    setTranscribing(true);
+    try {
+      const { ensureTranscribePermission, transcribeAudioFile } = await import('@/lib/transcribeNative');
+      const granted = await ensureTranscribePermission();
+      if (!granted) { toast('음성 인식 권한이 필요합니다.', 'error'); return; }
+      const segs = await transcribeAudioFile(blob, meeting.audioType, sttLang);
+      if (!segs.length) { toast('전사 결과가 비어 있어요.', 'error'); return; }
+      await mutate((m) => ({ ...m, segments: segs }));
+      setTab('transcript');
+      toast('전사를 완료했어요.', 'success');
+    } catch {
+      toast('전사에 실패했어요. (지원 형식·권한 확인)', 'error');
+    } finally {
+      setTranscribing(false);
+    }
+  };
+
   const onDelete = async () => {
     const ok = await confirmDialog({ message: '이 회의록을 삭제할까요?', confirmLabel: '삭제', danger: true });
     if (!ok) return;
@@ -322,6 +347,22 @@ export default function MeetingDetail(): JSX.Element {
         </div>
       )}
 
+      {/* 자동 전사 (iOS 네이티브 온디바이스) */}
+      {isNative && meeting.hasAudio && (
+        <div className="flex-none px-4 pt-3">
+          <button
+            type="button"
+            onClick={onAutoTranscribe}
+            disabled={transcribing}
+            className="w-full flex items-center justify-center gap-2 rounded-full bg-primary/10 text-primary text-sm font-semibold py-2.5 disabled:opacity-60"
+          >
+            {transcribing
+              ? <><Loader2 size={16} className="animate-spin" /> 전사 중…</>
+              : <><Sparkles size={16} /> {meeting.segments.length ? '다시 자동 전사' : '자동 전사 (받아쓰기)'}</>}
+          </button>
+        </div>
+      )}
+
       {/* 발언 비중 (2인 이상) */}
       {shares.length > 1 && (
         <div className="flex-none px-4 pt-3">
@@ -361,7 +402,10 @@ export default function MeetingDetail(): JSX.Element {
       <div className="flex-1 min-h-0 overflow-y-auto px-4 py-3 space-y-2">
         {tab === 'transcript' && (
           meeting.segments.length === 0 ? (
-            <p className="text-center text-muted text-sm pt-8">전사된 내용이 없습니다.</p>
+            <p className="text-center text-muted text-sm pt-8">
+              전사된 내용이 없습니다.
+              {meeting.hasAudio && !isNative && <><br />자동 전사(받아쓰기)는 iOS 앱에서 지원돼요.</>}
+            </p>
           ) : (
             <>
               <div className="flex justify-end -mt-1">
