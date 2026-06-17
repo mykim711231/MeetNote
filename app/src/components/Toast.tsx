@@ -9,6 +9,7 @@ const ICON: Record<ToastKind, typeof Info> = {
 
 export default function Toast(): JSX.Element | null {
   const items = useToastStore((s) => s.items);
+  const dismiss = useToastStore((s) => s.dismiss);
   if (items.length === 0) return null;
 
   return (
@@ -24,6 +25,15 @@ export default function Toast(): JSX.Element | null {
           >
             <Icon size={16} className={t.kind === 'error' ? 'text-accent' : 'text-primary'} aria-hidden />
             <span className="flex-1">{t.msg}</span>
+            {t.action && (
+              <button
+                type="button"
+                onClick={() => { t.action!.onClick(); dismiss(t.id); }}
+                className="flex-none font-bold text-primary px-2 py-1 -my-1 rounded-full hover:bg-primary/10"
+              >
+                {t.action.label}
+              </button>
+            )}
           </div>
         );
       })}

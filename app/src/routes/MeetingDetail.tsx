@@ -23,7 +23,7 @@ const SPEEDS = [1, 1.25, 1.5, 2, 0.75];
 export default function MeetingDetail(): JSX.Element {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const { folders, update, remove } = useMeetingStore();
+  const { folders, update, remove, saveNew } = useMeetingStore();
 
   const [meeting, setMeeting] = useState<MeetingMeta | null>(null);
   const [notFound, setNotFound] = useState(false);
@@ -188,11 +188,19 @@ export default function MeetingDetail(): JSX.Element {
   const onTogglePin = () => mutate((m) => ({ ...m, pinned: !m.pinned }));
 
   const onDelete = async () => {
-    const ok = await confirmDialog({ message: '이 회의록을 삭제할까요?\n되돌릴 수 없습니다.', confirmLabel: '삭제', danger: true });
+    const ok = await confirmDialog({ message: '이 회의록을 삭제할까요?', confirmLabel: '삭제', danger: true });
     if (!ok) return;
+    const snapshot: MeetingMeta = { ...meeting, segments: meeting.segments };
+    const blob = meeting.hasAudio ? (await getAudio(meeting.id)) ?? null : null;
     await remove(meeting.id);
-    toast('삭제되었습니다.');
     navigate('/library');
+    toast('삭제되었습니다.', 'info', {
+      duration: 6000,
+      action: {
+        label: '실행 취소',
+        onClick: () => { void saveNew(snapshot, blob).then(() => toast('복구되었습니다.', 'success')).catch(() => toast('복구 실패', 'error')); },
+      },
+    });
   };
 
   const exportTxt = () => downloadBlob(new Blob([toPlainText(meeting)], { type: 'text/plain;charset=utf-8' }), `${safeFilename(meeting.title)}.txt`);
