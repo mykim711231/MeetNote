@@ -35,6 +35,9 @@ export default function RecordView(): JSX.Element {
   const paused = rec.state === 'paused';
   const busy = recording || paused;
 
+  // iOS(아이폰/아이패드) Safari는 Web Speech 자막 미지원 + 마이크 녹음 제약 → 음성 메모 가져오기 권장
+  const isIOS = typeof navigator !== 'undefined' && /iPad|iPhone|iPod/.test(navigator.userAgent);
+
   // iOS Safari 등은 getDisplayMedia(시스템 소리 캡처) 미지원 → 마이크만 노출
   const canSystemAudio = typeof navigator !== 'undefined' && !!navigator.mediaDevices?.getDisplayMedia;
   useEffect(() => {
@@ -103,7 +106,17 @@ export default function RecordView(): JSX.Element {
     <div className="flex flex-col h-full">
       {/* 경고 배너 */}
       {!window.isSecureContext && <Banner text="HTTPS(또는 localhost)에서만 녹음할 수 있습니다." />}
-      {window.isSecureContext && !rec.sttSupported && (
+      {isIOS && !busy && (
+        <div className="flex-none flex items-start gap-2 px-4 py-2 text-xs bg-primary/10 text-primary">
+          <AlertTriangle size={14} className="flex-none mt-0.5" />
+          <span>
+            아이폰은 실시간 자막이 안 돼요. <b>음성 메모</b> 앱으로 녹음한 뒤{' '}
+            <button type="button" onClick={() => navigate('/library')} className="underline font-semibold">기록 → 가져오기</button>
+            로 불러오세요.
+          </span>
+        </div>
+      )}
+      {window.isSecureContext && !rec.sttSupported && !isIOS && (
         <Banner text="이 브라우저는 실시간 자막을 지원하지 않습니다(녹음·재생은 정상). Chrome·Edge 권장." soft />
       )}
       {rec.error && <Banner text={rec.error} />}
