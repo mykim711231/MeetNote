@@ -138,6 +138,9 @@ export function useRecorder() {
         });
       }
       if (useSystem) {
+        if (!navigator.mediaDevices?.getDisplayMedia) {
+          throw new DOMException('이 기기는 시스템 소리 녹음을 지원하지 않습니다. 마이크를 사용하세요.', 'NotSupportedError');
+        }
         const disp = await navigator.mediaDevices.getDisplayMedia({ audio: true, video: true });
         disp.getVideoTracks().forEach((t) => t.stop()); // 영상은 불필요
         if (disp.getAudioTracks().length === 0) {

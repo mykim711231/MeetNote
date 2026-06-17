@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Mic, Pause, Play, Square, X, Plus, AlertTriangle } from 'lucide-react';
 import { useRecorderContext } from '@/components/RecorderProvider';
+import type { RecSource } from '@/hooks/useRecorder';
 import { useMeetingStore } from '@/stores/useMeetingStore';
 import { usePrefStore, STT_LANGS } from '@/stores/usePrefStore';
 import { requestPersist, clearDraft } from '@/lib/db';
@@ -33,6 +34,15 @@ export default function RecordView(): JSX.Element {
   const recording = rec.state === 'recording';
   const paused = rec.state === 'paused';
   const busy = recording || paused;
+
+  // iOS Safari 등은 getDisplayMedia(시스템 소리 캡처) 미지원 → 마이크만 노출
+  const canSystemAudio = typeof navigator !== 'undefined' && !!navigator.mediaDevices?.getDisplayMedia;
+  useEffect(() => {
+    if (!canSystemAudio && source !== 'mic') setSource('mic');
+  }, [canSystemAudio, source, setSource]);
+  const sourceOpts: Array<{ key: RecSource; label: string }> = canSystemAudio
+    ? [{ key: 'mic', label: '마이크' }, { key: 'system', label: '시스템 소리' }, { key: 'both', label: '둘 다' }]
+    : [{ key: 'mic', label: '마이크' }];
 
   const onAddSpeaker = () => {
     addSpeaker(newSpeaker);
@@ -153,8 +163,8 @@ export default function RecordView(): JSX.Element {
       {/* 녹음 소스 (대기 중에만) */}
       {!busy && (
         <div className="flex-none px-4 pt-3">
-          <div className="grid grid-cols-3 rounded-full bg-divider/30 p-1 text-xs">
-            {([['mic', '마이크'], ['system', '시스템 소리'], ['both', '둘 다']] as const).map(([key, label]) => (
+          <div className="grid rounded-full bg-divider/30 p-1 text-xs" style={{ gridTemplateColumns: `repeat(${sourceOpts.length}, 1fr)` }}>
+            {sourceOpts.map(({ key, label }) => (
               <button
                 key={key}
                 type="button"
@@ -165,7 +175,12 @@ export default function RecordView(): JSX.Element {
               </button>
             ))}
           </div>
-          {source !== 'mic' && (
+          {!canSystemAudio && (
+            <p className="text-xs text-muted mt-1.5 leading-relaxed">
+              이 기기는 <b>마이크 녹음</b>만 지원해요. 시스템 소리(온라인 회의) 녹음은 데스크톱 Chrome·Edge에서 됩니다.
+            </p>
+          )}
+          {canSystemAudio && source !== 'mic' && (
             <p className="text-xs text-muted mt-1.5 leading-relaxed">
               온라인 회의 소리를 녹음합니다. 시작 시 공유 창에서 <b>“탭/시스템 오디오 공유”</b>를 켜세요.
               {source === 'system' && ' 시스템 소리만 녹음하면 실시간 자막은 생성되지 않습니다.'}
