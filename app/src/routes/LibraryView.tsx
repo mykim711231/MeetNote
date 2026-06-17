@@ -1,8 +1,11 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Search, Mic, ChevronRight, FolderOpen, Pin } from 'lucide-react';
+import { Search, Mic, ChevronRight, FolderOpen, Pin, FilePlus2 } from 'lucide-react';
 import { useMeetingStore } from '@/stores/useMeetingStore';
 import { fmtDate, fmtDuration } from '@/lib/format';
+import { getAudioDuration, guessAudioType, fileTitle } from '@/lib/audioFile';
+import { requestPersist } from '@/lib/db';
+import { toast } from '@/stores/useToastStore';
 import type { MeetingMeta } from '@/types';
 
 type Sort = 'recent' | 'oldest' | 'longest';
@@ -34,12 +37,46 @@ function snippet(m: MeetingMeta, q: string): string {
 
 export default function LibraryView(): JSX.Element {
   const navigate = useNavigate();
-  const { meetings, folders, loaded, load } = useMeetingStore();
+  const { meetings, folders, loaded, load, saveNew } = useMeetingStore();
   const [q, setQ] = useState('');
   const [folderId, setFolderId] = useState<string | 'all'>('all');
   const [sort, setSort] = useState<Sort>('recent');
+  const [importing, setImporting] = useState(false);
+  const fileRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => { if (!loaded) void load(); }, [loaded, load]);
+
+  const onImport = async (file: File) => {
+    if (!file.type.startsWith('audio') && !/\.(mp3|m4a|aac|wav|ogg|opus|webm|flac|amr|3gp|mp4)$/i.test(file.name)) {
+      toast('오디오 파일만 가져올 수 있어요.', 'error');
+      return;
+    }
+    setImporting(true);
+    try {
+      await requestPersist().catch(() => false);
+      const audioType = guessAudioType(file);
+      const blob = file.type ? file : new Blob([file], { type: audioType });
+      const duration = await getAudioDuration(blob);
+      const meta: MeetingMeta = {
+        id: Date.now(),
+        title: fileTitle(file),
+        date: new Date(file.lastModified || Date.now()).toISOString(),
+        duration,
+        segments: [],
+        folderId: folderId === 'all' ? null : folderId,
+        hasAudio: true,
+        audioType,
+      };
+      await saveNew(meta, blob);
+      toast('파일을 가져왔어요.', 'success');
+      navigate(`/m/${meta.id}`);
+    } catch {
+      toast('가져오기 실패 — 저장 공간이 부족할 수 있어요.', 'error');
+    } finally {
+      setImporting(false);
+      if (fileRef.current) fileRef.current.value = '';
+    }
+  };
 
   const filtered = useMemo(() => {
     const needle = q.trim().toLowerCase();
@@ -105,6 +142,22 @@ export default function LibraryView(): JSX.Element {
           <option value="oldest">오래된순</option>
           <option value="longest">긴 길이순</option>
         </select>
+        <button
+          type="button"
+          onClick={() => fileRef.current?.click()}
+          disabled={importing}
+          aria-label="오디오 파일 가져오기"
+          className="flex-none w-9 h-9 grid place-items-center rounded-full bg-primary text-white disabled:opacity-50"
+        >
+          <FilePlus2 size={18} />
+        </button>
+        <input
+          ref={fileRef}
+          type="file"
+          accept="audio/*"
+          className="hidden"
+          onChange={(e) => { const f = e.target.files?.[0]; if (f) void onImport(f); }}
+        />
       </div>
 
       {/* 결과 개수 */}
@@ -140,6 +193,7 @@ export default function LibraryView(): JSX.Element {
               <>
                 <Mic size={40} className="opacity-40" />
                 <p className="text-sm">아직 저장된 회의록이 없습니다.</p>
+                <p className="text-xs">녹음하거나, 위 <span className="text-primary font-semibold">＋</span> 버튼으로 오디오 파일을 가져오세요.</p>
               </>
             ) : (
               <>
