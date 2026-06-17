@@ -9,10 +9,12 @@ import { toast } from '@/stores/useToastStore';
 import { confirmDialog } from '@/stores/useConfirmStore';
 import { fmtBytes } from '@/lib/format';
 import InstallPrompt from '@/components/InstallPrompt';
+import { useRecorderContext } from '@/components/RecorderProvider';
 import type { BackupFile } from '@/types';
 
 export default function SettingsView(): JSX.Element {
   const { folders, addFolder, removeFolder, meetings, load } = useMeetingStore();
+  const { rec } = useRecorderContext();
   const [persisted, setPersisted] = useState(false);
   const [usage, setUsage] = useState<{ usage: number; quota: number } | null>(null);
   const [newFolder, setNewFolder] = useState('');
@@ -93,7 +95,8 @@ export default function SettingsView(): JSX.Element {
   };
 
   const onClearAll = async () => {
-    const ok = await confirmDialog({ message: '모든 회의록·메모·설정을 삭제합니다.\n되돌릴 수 없습니다. 계속할까요?', confirmLabel: '전체 삭제', danger: true });
+    const warn = rec.state !== 'idle' ? '⚠️ 지금 녹음이 진행 중입니다. 초기화하면 녹음 데이터도 사라집니다.\n\n' : '';
+    const ok = await confirmDialog({ message: `${warn}모든 회의록·메모·설정을 삭제합니다.\n되돌릴 수 없습니다. 계속할까요?`, confirmLabel: '전체 삭제', danger: true });
     if (!ok) return;
     await clearAllData();
     toast('모든 데이터를 삭제했습니다.');

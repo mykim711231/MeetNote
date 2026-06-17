@@ -33,6 +33,7 @@ export default function MeetingDetail(): JSX.Element {
 
   const audioRef = useRef<HTMLAudioElement>(null);
   const lastPosSaveRef = useRef(0);
+  const userSeekedRef = useRef(false);
   const [playing, setPlaying] = useState(false);
   const [curMs, setCurMs] = useState(0);
   const [speedIdx, setSpeedIdx] = useState(0);
@@ -40,6 +41,9 @@ export default function MeetingDetail(): JSX.Element {
   const [noteDraft, setNoteDraft] = useState<string | null>(null);
 
   const mid = Number(id);
+
+  // 회의 전환 시 재생 위치 throttle·seek 플래그 리셋
+  useEffect(() => { lastPosSaveRef.current = 0; userSeekedRef.current = false; }, [mid]);
 
   // 회의록 로드
   useEffect(() => {
@@ -157,6 +161,7 @@ export default function MeetingDetail(): JSX.Element {
   const seekTo = (ms: number) => {
     const a = audioRef.current;
     if (!a || !audioUrl) return; // 오디오 로드 전 play() 호출로 인한 uncaught rejection 방지
+    userSeekedRef.current = true; // 이후 loadedmetadata의 위치 복원이 덮어쓰지 않도록
     a.currentTime = ms / 1000;
     setCurMs(ms);
     void a.play();
@@ -194,6 +199,7 @@ export default function MeetingDetail(): JSX.Element {
     if (!ok) return;
     const snapshot: MeetingMeta = { ...meeting, segments: meeting.segments };
     const blob = meeting.hasAudio ? (await getAudio(meeting.id)) ?? null : null;
+    const savedPos = getPlayPos(meeting.id);
     clearPlayPos(meeting.id);
     await remove(meeting.id);
     navigate('/library');
@@ -201,7 +207,11 @@ export default function MeetingDetail(): JSX.Element {
       duration: 6000,
       action: {
         label: '실행 취소',
-        onClick: () => { void saveNew(snapshot, blob).then(() => toast('복구되었습니다.', 'success')).catch(() => toast('복구 실패', 'error')); },
+        onClick: () => {
+          void saveNew(snapshot, blob)
+            .then(() => { if (savedPos > 0) setPlayPos(snapshot.id, savedPos); toast('복구되었습니다.', 'success'); })
+            .catch(() => toast('복구 실패', 'error'));
+        },
       },
     });
   };
@@ -286,6 +296,7 @@ export default function MeetingDetail(): JSX.Element {
             ref={audioRef}
             src={audioUrl ?? undefined}
             onLoadedMetadata={(e) => {
+              if (userSeekedRef.current) return; // 사용자가 먼저 위치를 골랐으면 복원하지 않음
               const pos = getPlayPos(meeting.id);
               const durMs = e.currentTarget.duration * 1000;
               if (pos > 0 && Number.isFinite(durMs) && pos < durMs - 3000) {

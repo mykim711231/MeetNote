@@ -30,6 +30,14 @@ export function RecorderProvider({ children }: { children: ReactNode }): JSX.Ele
   const { setSpeaker } = rec;
   useEffect(() => { setSpeaker(current); }, [current, setSpeaker]);
 
+  // 녹음 중 탭 닫기/새로고침 시 경고 (크래시 복구와 병행 안전장치)
+  useEffect(() => {
+    if (rec.state === 'idle') return;
+    const handler = (e: BeforeUnloadEvent) => { e.preventDefault(); e.returnValue = ''; };
+    window.addEventListener('beforeunload', handler);
+    return () => window.removeEventListener('beforeunload', handler);
+  }, [rec.state]);
+
   const addSpeaker = (name: string) => {
     const n = name.trim();
     if (n && !speakers.includes(n)) {
