@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="robots" content="noindex" />
+    <title>MeetNote — 이동 중</title>
+    <style>
+      body { font-family: -apple-system, "Malgun Gothic", sans-serif; background: #0f1115; color: #e6e8ec;
+        display: flex; align-items: center; justify-content: center; height: 100vh; margin: 0; text-align: center; }
+      a { color: #818cf8; }
+    </style>
+    <script>
+      // 예전 단일파일 앱(meetnote.html)을 쓰던 사용자 마이그레이션:
+      // 옛 서비스워커·캐시를 정리하고 새 앱(./)으로 이동한다.
+      (function () {
+        function go() { location.replace('./'); }
+        var tasks = [];
+        try {
+          if ('serviceWorker' in navigator) {
+            tasks.push(
+              navigator.serviceWorker.getRegistrations()
+                .then(function (regs) { return Promise.all(regs.map(function (r) { return r.unregister(); })); })
+                .catch(function () {})
+            );
+          }
+          if (window.caches && caches.keys) {
+            tasks.push(
+              caches.keys()
+                .then(function (keys) { return Promise.all(keys.map(function (k) { return caches.delete(k); })); })
+                .catch(function () {})
+            );
+          }
+        } catch (e) {}
+        Promise.all(tasks).then(go);
+        setTimeout(go, 1500); // 안전장치
+      })();
+    </script>
+  </head>
+  <body>
+    <p>새 버전으로 이동 중입니다… 자동으로 넘어가지 않으면 <a href="./">여기를 누르세요</a>.</p>
+  </body>
+</html>
