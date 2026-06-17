@@ -161,7 +161,18 @@ npm run build
 
 ---
 
+## 📱 플랫폼 / 하이브리드 (Capacitor)
+
+웹(PWA)을 기본으로 하되, **iOS는 Capacitor로 네이티브 앱**으로 감싸 자막을 네이티브 음성인식(SFSpeechRecognizer, 온디바이스)으로 처리합니다 — iOS WKWebView에는 Web Speech API가 없고, 회의 거리(원거리) 자막에 유리하기 때문입니다.
+
+- 코드 분기: `Capacitor.isNativePlatform()` (웹=Web Speech / 네이티브=플러그인). 웹 동작은 그대로 유지.
+- 빌드: `npm run cap:ios` (Mac 필요)
+- 상세: **[iOS 빌드 가이드](Docs/iOS_빌드_가이드.md)**
+
+> 웹 자막(Web Speech API)은 근접 발화에 강하고 원거리·장시간에 약합니다. 모바일은 네이티브 STT 경로를 권장합니다.
+
 ## 📄 문서
 
 - [사용설명서](Docs/사용설명서.md) — 기능별 사용 방법
+- [iOS 빌드 가이드](Docs/iOS_빌드_가이드.md) — Capacitor 하이브리드 iOS 빌드/실행
 - [회의록 기술 스택 조사](Docs/회의록_기술스택_조사.md) — STT/요약 기술 비교 및 향후 방향

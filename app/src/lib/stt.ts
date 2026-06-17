@@ -40,7 +40,15 @@ export interface SttCallbacks {
   onFatal?: (reason: string) => void;
 }
 
-export class SttController {
+/** 웹(Web Speech)·네이티브(Capacitor) 공통 STT 세션 인터페이스 */
+export interface SttSession {
+  start(): void;
+  pause(): void;
+  resume(): void;
+  stop(): void;
+}
+
+export class SttController implements SttSession {
   private rec: SpeechRecognitionLike | null = null;
   private running = false;       // 의도적으로 켜진 상태
   private paused = false;

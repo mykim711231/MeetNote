@@ -3,3 +3,9 @@ app/dist
 .env
 .env.local
 *.log
+
+# Capacitor (iOS는 Mac에서 생성)
+app/ios/App/Pods/
+app/ios/App/App/public/
+app/ios/DerivedData/
+app/android/

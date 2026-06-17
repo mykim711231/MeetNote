@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { Segment } from '@/types';
-import { SttController, isSttSupported } from '@/lib/stt';
+import { Capacitor } from '@capacitor/core';
+import { SttController, isSttSupported, type SttSession } from '@/lib/stt';
 import { appendDraftChunk, saveDraftMeta, clearDraft } from '@/lib/db';
 import { usePrefStore } from '@/stores/usePrefStore';
 import { useWakeLock } from './useWakeLock';
@@ -37,7 +38,8 @@ export function useRecorder() {
   const [interim, setInterim] = useState('');
   const [error, setError] = useState<string | null>(null);
 
-  const sttSupported = isSttSupported();
+  // 웹: Web Speech API / 네이티브(iOS·Android): Capacitor 음성인식 플러그인
+  const sttSupported = isSttSupported() || Capacitor.isNativePlatform();
 
   // ── 내부 ref ──
   const streamRef = useRef<MediaStream | null>(null);
@@ -46,7 +48,7 @@ export function useRecorder() {
   const mediaRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<BlobPart[]>([]);
   const mimeRef = useRef('');
-  const sttRef = useRef<SttController | null>(null);
+  const sttRef = useRef<SttSession | null>(null);
   const segmentsRef = useRef<Segment[]>([]);
   const speakerRef = useRef('나');
 
@@ -129,8 +131,10 @@ export function useRecorder() {
     let stream: MediaStream;
     try {
       if (useMic) {
+        // denoise=off면 AEC/NS/AGC 모두 끔 → 마이크가 "통화 모드"로 전환되지 않아
+        // 동시 실행되는 SpeechRecognition이 원거리(회의실) 음성을 더 잘 잡는다.
         micStreamRef.current = await navigator.mediaDevices.getUserMedia({
-          audio: { echoCancellation: true, noiseSuppression: denoise, autoGainControl: denoise },
+          audio: { echoCancellation: denoise, noiseSuppression: denoise, autoGainControl: denoise },
         });
       }
       if (useSystem) {
@@ -253,13 +257,18 @@ export function useRecorder() {
       return;
     }
 
-    // STT — 마이크가 포함된 소스에서만 (시스템 소리는 SpeechRecognition 입력 불가)
+    // STT — 마이크가 포함된 소스에서만 (시스템 소리는 음성인식 입력 불가)
     if (sttSupported && useMic) {
-      const ctrl = new SttController({
-        onFinal: pushFinal,
-        onInterim: setInterim,
-        onFatal: () => setInterim(''),
-      }, usePrefStore.getState().sttLang);
+      const cb = { onFinal: pushFinal, onInterim: setInterim, onFatal: () => setInterim('') };
+      const lang = usePrefStore.getState().sttLang;
+      let ctrl: SttSession;
+      if (Capacitor.isNativePlatform()) {
+        // iOS WKWebView엔 Web Speech가 없으므로 네이티브 플러그인 사용(동적 import → 웹 번들 제외)
+        const { NativeSttController } = await import('@/lib/sttNative');
+        ctrl = new NativeSttController(cb, lang);
+      } else {
+        ctrl = new SttController(cb, lang);
+      }
       ctrl.start();
       sttRef.current = ctrl;
     }
