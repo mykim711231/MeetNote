@@ -50,6 +50,35 @@ npx cap sync ios           # 웹 자산 + 플러그인 동기화
 > 동작: 상세 화면에서 **자동 전사(받아쓰기)** 버튼 → 권한 요청 → 온디바이스 전사 → 문장 단위 자막 저장.
 > 웹에서는 이 버튼이 보이지 않습니다(iOS 전용 엔진).
 
+### 음성 메모에서 공유 → MeetNote 가져오기 (문서 타입 등록)
+음성 메모 등에서 **공유 → MeetNote** 또는 **MeetNote로 열기** 시 자동으로 회의록으로 가져옵니다.
+앱 측 처리는 이미 구현됨(`src/lib/shareImport.ts`, `appUrlOpen` 리스너). Info.plist에 아래만 추가하세요.
+
+`ios/App/App/Info.plist` `<dict>` 안에 추가:
+```xml
+<key>CFBundleDocumentTypes</key>
+<array>
+  <dict>
+    <key>CFBundleTypeName</key>
+    <string>Audio</string>
+    <key>LSHandlerRank</key>
+    <string>Alternate</string>
+    <key>LSItemContentTypes</key>
+    <array>
+      <string>public.audio</string>
+      <string>public.mpeg-4-audio</string>
+      <string>com.apple.m4a-audio</string>
+      <string>public.mp3</string>
+      <string>com.microsoft.waveform-audio</string>
+    </array>
+  </dict>
+</array>
+<key>LSSupportsOpeningDocumentsInPlace</key>
+<false/>
+```
+> `LSSupportsOpeningDocumentsInPlace=false` → iOS가 파일을 앱 Inbox로 복사해 읽기 가능한 file:// URL을 넘겨줍니다.
+> 동작: 음성 메모 → 공유 → **MeetNote** → 앱이 열리며 자동으로 회의록 생성 → (오디오 있으면) 상세에서 **자동 전사** 가능.
+
 ### Xcode 설정
 - **Signing & Capabilities** → Team 선택(개인 계정 가능)
 - **Deployment Target**: iOS 14.3 이상 (WKWebView MediaRecorder), 온디바이스 전사는 iOS 13+ / 권장 16+(문장부호)

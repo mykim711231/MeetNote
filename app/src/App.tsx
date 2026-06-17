@@ -13,6 +13,7 @@ import RecordView from '@/routes/RecordView';
 import LibraryView from '@/routes/LibraryView';
 import SettingsView from '@/routes/SettingsView';
 import MeetingDetail from '@/routes/MeetingDetail';
+import { Capacitor } from '@capacitor/core';
 import { useMeetingStore } from '@/stores/useMeetingStore';
 import { fmtTime } from '@/lib/format';
 
@@ -51,6 +52,12 @@ function MainLayout(): JSX.Element {
 export default function App(): JSX.Element {
   const load = useMeetingStore((s) => s.load);
   useEffect(() => { void load(); }, [load]);
+
+  // 네이티브(iOS/Android): 음성 메모 등에서 공유/열기로 들어온 오디오를 회의록으로 가져오기
+  useEffect(() => {
+    if (!Capacitor.isNativePlatform()) return;
+    void import('@/lib/shareImport').then((m) => m.initShareImport()).catch(() => {});
+  }, []);
 
   return (
     <RecorderProvider>
