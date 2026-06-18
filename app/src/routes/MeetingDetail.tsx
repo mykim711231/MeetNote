@@ -42,6 +42,7 @@ export default function MeetingDetail(): JSX.Element {
   const [editing, setEditing] = useState(false);
   const [noteDraft, setNoteDraft] = useState<string | null>(null);
   const [transcribing, setTranscribing] = useState(false);
+  const [transcribeMsg, setTranscribeMsg] = useState<string | null>(null);
   const sttLang = usePrefStore((s) => s.sttLang);
   const isNative = Capacitor.isNativePlatform();
 
@@ -203,19 +204,37 @@ export default function MeetingDetail(): JSX.Element {
     const blob = await getAudio(meeting.id);
     if (!blob) { toast('오디오가 없습니다.', 'error'); return; }
     setTranscribing(true);
+    setTranscribeMsg(null);
     try {
-      const { ensureTranscribePermission, transcribeAudioFile } = await import('@/lib/transcribeNative');
-      const granted = await ensureTranscribePermission();
-      if (!granted) { toast('음성 인식 권한이 필요합니다.', 'error'); return; }
-      const segs = await transcribeAudioFile(blob, meeting.audioType, sttLang);
+      let segs;
+      if (isNative) {
+        // iOS 네이티브: 온디바이스 SFSpeech (빠름)
+        const { ensureTranscribePermission, transcribeAudioFile } = await import('@/lib/transcribeNative');
+        const granted = await ensureTranscribePermission();
+        if (!granted) { toast('음성 인식 권한이 필요합니다.', 'error'); return; }
+        setTranscribeMsg('전사 중…');
+        segs = await transcribeAudioFile(blob, meeting.audioType, sttLang);
+      } else {
+        // 웹: 온디바이스 Whisper (브라우저 안에서 전사, 첫 사용 시 모델 다운로드)
+        const { transcribeWithWhisper } = await import('@/lib/transcribeWhisper');
+        setTranscribeMsg('모델 준비 중…');
+        segs = await transcribeWithWhisper(blob, sttLang, (p) => {
+          if (p.status === 'progress' && typeof p.progress === 'number') {
+            setTranscribeMsg(`모델 준비 ${Math.round(p.progress)}%`);
+          } else if (p.status === 'done' || p.status === 'ready') {
+            setTranscribeMsg('전사 중…');
+          }
+        });
+      }
       if (!segs.length) { toast('전사 결과가 비어 있어요.', 'error'); return; }
       await mutate((m) => ({ ...m, segments: segs }));
       setTab('transcript');
       toast('전사를 완료했어요.', 'success');
     } catch {
-      toast('전사에 실패했어요. (지원 형식·권한 확인)', 'error');
+      toast('전사에 실패했어요. (형식·메모리·권한 확인)', 'error');
     } finally {
       setTranscribing(false);
+      setTranscribeMsg(null);
     }
   };
 
@@ -347,8 +366,8 @@ export default function MeetingDetail(): JSX.Element {
         </div>
       )}
 
-      {/* 자동 전사 (iOS 네이티브 온디바이스) */}
-      {isNative && meeting.hasAudio && (
+      {/* 자동 전사 (웹: 온디바이스 Whisper / iOS 네이티브: SFSpeech) */}
+      {meeting.hasAudio && (
         <div className="flex-none px-4 pt-3">
           <button
             type="button"
@@ -357,9 +376,14 @@ export default function MeetingDetail(): JSX.Element {
             className="w-full flex items-center justify-center gap-2 rounded-full bg-primary/10 text-primary text-sm font-semibold py-2.5 disabled:opacity-60"
           >
             {transcribing
-              ? <><Loader2 size={16} className="animate-spin" /> 전사 중…</>
+              ? <><Loader2 size={16} className="animate-spin" /> {transcribeMsg ?? '전사 중…'}</>
               : <><Sparkles size={16} /> {meeting.segments.length ? '다시 자동 전사' : '자동 전사 (받아쓰기)'}</>}
           </button>
+          {!isNative && !transcribing && meeting.segments.length === 0 && (
+            <p className="text-xs text-muted mt-1.5 leading-relaxed text-center">
+              기기 안에서 처리돼요(무료·업로드 없음). 첫 사용 시 모델을 한 번 받습니다.
+            </p>
+          )}
         </div>
       )}
 
@@ -404,7 +428,7 @@ export default function MeetingDetail(): JSX.Element {
           meeting.segments.length === 0 ? (
             <p className="text-center text-muted text-sm pt-8">
               전사된 내용이 없습니다.
-              {meeting.hasAudio && !isNative && <><br />자동 전사(받아쓰기)는 iOS 앱에서 지원돼요.</>}
+              {meeting.hasAudio && <><br />위 <b>자동 전사</b> 버튼으로 받아쓸 수 있어요.</>}
             </p>
           ) : (
             <>

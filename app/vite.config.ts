@@ -39,13 +39,23 @@ export default defineConfig(({ command }) => {
       },
       workbox: {
         globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2}'],
+        // Whisper(transformers.js) 청크/모델은 프리캐시 제외 — 무겁고 첫 사용 시에만 로드
+        globIgnores: ['**/transformers*', '**/whisper*', '**/ort*', '**/*.wasm'],
         navigateFallback: `${base}index.html`,
         navigateFallbackDenylist: [/^\/(api|_)\//],
+        maximumFileSizeToCacheInBytes: 4 * 1024 * 1024,
       },
     }),
   ],
+  // transformers.js는 prebundle하지 않음(onnxruntime-web 호환)
+  optimizeDeps: {
+    exclude: ['@huggingface/transformers'],
+  },
+  worker: {
+    format: 'es',
+  },
   build: {
-    target: 'es2017',
+    target: 'es2020', // transformers.js의 BigInt 리터럴 지원 (모던 브라우저·iOS14+)
     rollupOptions: {
       output: {
         manualChunks: {
