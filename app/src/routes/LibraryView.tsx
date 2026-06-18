@@ -7,6 +7,7 @@ import { getAudioDuration, guessAudioType, fileTitle } from '@/lib/audioFile';
 import { requestPersist } from '@/lib/db';
 import { toast } from '@/stores/useToastStore';
 import MonthCalendar, { dayKey } from '@/components/MonthCalendar';
+import { NOTE_TEMPLATES, type NoteTemplate } from '@/lib/noteTemplates';
 import type { MeetingMeta } from '@/types';
 
 type Sort = 'recent' | 'oldest' | 'longest';
@@ -44,6 +45,7 @@ export default function LibraryView(): JSX.Element {
   const [mode, setMode] = useState<ViewMode>('list');
   const [selectedDay, setSelectedDay] = useState<string | null>(null);
   const [importing, setImporting] = useState(false);
+  const [showTpl, setShowTpl] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => { if (!loaded) void load(); }, [loaded, load]);
@@ -80,16 +82,18 @@ export default function LibraryView(): JSX.Element {
     }
   };
 
-  const onNewNote = async () => {
+  const onNewNote = async (tpl: NoteTemplate) => {
+    setShowTpl(false);
     const meta: MeetingMeta = {
       id: Date.now(),
-      title: '새 노트',
+      title: tpl.title,
       date: new Date().toISOString(),
       duration: 0,
       segments: [],
       folderId: folderId === 'all' ? null : folderId,
       hasAudio: false,
       audioType: '',
+      note: tpl.body || undefined,
     };
     try {
       await saveNew(meta, null);
@@ -126,7 +130,7 @@ export default function LibraryView(): JSX.Element {
       <div className="flex-none px-4 pt-3 grid grid-cols-3 gap-2">
         <QuickAction Icon={Mic} label="녹음" onClick={() => navigate('/')} />
         <QuickAction Icon={Upload} label="파일 업로드" onClick={() => fileRef.current?.click()} disabled={importing} />
-        <QuickAction Icon={FileText} label="새 노트" onClick={() => void onNewNote()} />
+        <QuickAction Icon={FileText} label="새 노트" onClick={() => setShowTpl(true)} />
       </div>
       <input
         ref={fileRef}
@@ -239,6 +243,32 @@ export default function LibraryView(): JSX.Element {
           ))
         )}
       </div>
+
+      {/* 새 노트 템플릿 선택 */}
+      {showTpl && (
+        <div className="fixed inset-0 z-[60] bg-black/50 flex items-end sm:items-center justify-center p-4" role="dialog" aria-modal="true" onClick={() => setShowTpl(false)}>
+          <div className="bg-surface rounded-2xl max-w-sm w-full p-4 shadow-xl" onClick={(e) => e.stopPropagation()}>
+            <h3 className="text-base font-bold text-fg mb-3">노트 양식 선택</h3>
+            <div className="space-y-2">
+              {NOTE_TEMPLATES.map((t) => (
+                <button
+                  key={t.id}
+                  type="button"
+                  onClick={() => void onNewNote(t)}
+                  className="w-full text-left flex items-center justify-between rounded-xl border border-divider px-4 py-3 active:scale-[0.99] transition"
+                >
+                  <div>
+                    <div className="text-sm font-semibold text-fg">{t.label}</div>
+                    <div className="text-xs text-muted">{t.desc}</div>
+                  </div>
+                  <ChevronRight size={16} className="text-muted" />
+                </button>
+              ))}
+            </div>
+            <button type="button" onClick={() => setShowTpl(false)} className="w-full mt-3 rounded-full border border-divider text-muted text-sm font-semibold py-2.5">닫기</button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -124,6 +124,9 @@ export default function MeetingDetail(): JSX.Element {
 
   // 메모 드래프트: 회의 로드/변경 시 초기화, 입력은 디바운스 저장(탭 전환·blur 미발화에도 보존)
   useEffect(() => { if (meeting) setNoteDraft(meeting.note ?? ''); }, [meeting?.id]);
+
+  // 오디오 없는 노트(템플릿 등)는 메모 탭으로 바로 열기
+  useEffect(() => { if (meeting && !meeting.hasAudio) setTab('note'); }, [meeting?.id, meeting?.hasAudio]);
   useEffect(() => {
     if (noteDraft == null) return;
     const t = window.setTimeout(() => { void onNote(noteDraft); }, 500);
