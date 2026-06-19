@@ -247,22 +247,30 @@ export default function NoteEditor({ value, onChange, onBlur, placeholder }: Pro
     if (!ref.current) return;
     const el = ref.current;
     const s = el.selectionStart;
+
+    // 현재 커서가 있는 라인의 끝으로 이동
     const lineStart = value.lastIndexOf('\n', s - 1) + 1;
     const lineEnd = value.indexOf('\n', s);
-    const end = lineEnd < 0 ? value.length : lineEnd;
-    const currentLine = value.slice(lineStart, end);
+    const actualLineEnd = lineEnd < 0 ? value.length : lineEnd;
+    const currentLine = value.slice(lineStart, actualLineEnd);
 
-    // 현재 라인이 비어있으면 그 라인에 삽입, 아니면 다음 라인에 추가
+    // 현재 라인이 비어있으면 그 라인에, 아니면 다음 라인에 삽입
     const isLineEmpty = !currentLine.trim();
     const ins = `> [!${type}] `;
-    const newValue = isLineEmpty
-      ? value.slice(0, lineStart) + ins + currentLine + value.slice(end)
-      : value.slice(0, end) + '\n' + ins + value.slice(end);
+
+    let newValue: string;
+    if (isLineEmpty) {
+      // 비어있는 라인 → 그 라인에 삽입
+      newValue = value.slice(0, lineStart) + ins + value.slice(actualLineEnd);
+    } else {
+      // 내용이 있는 라인 → 다음 라인에 삽입
+      newValue = value.slice(0, actualLineEnd) + '\n' + ins + value.slice(actualLineEnd);
+    }
 
     onChange(newValue);
     requestAnimationFrame(() => {
       el.focus();
-      const newCursorPos = isLineEmpty ? lineStart + ins.length : end + 1 + ins.length;
+      const newCursorPos = isLineEmpty ? lineStart + ins.length : actualLineEnd + 1 + ins.length;
       el.setSelectionRange(newCursorPos, newCursorPos);
     });
     setShowAdmon(false);
