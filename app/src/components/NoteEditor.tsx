@@ -247,9 +247,24 @@ export default function NoteEditor({ value, onChange, onBlur, placeholder }: Pro
     if (!ref.current) return;
     const el = ref.current;
     const s = el.selectionStart;
+    const lineStart = value.lastIndexOf('\n', s - 1) + 1;
+    const lineEnd = value.indexOf('\n', s);
+    const end = lineEnd < 0 ? value.length : lineEnd;
+    const currentLine = value.slice(lineStart, end);
+
+    // 현재 라인이 비어있으면 그 라인에 삽입, 아니면 다음 라인에 추가
+    const isLineEmpty = !currentLine.trim();
     const ins = `> [!${type}] `;
-    onChange(value.slice(0, s) + ins + value.slice(s));
-    requestAnimationFrame(() => { el.focus(); el.setSelectionRange(s + ins.length, s + ins.length); });
+    const newValue = isLineEmpty
+      ? value.slice(0, lineStart) + ins + currentLine + value.slice(end)
+      : value.slice(0, end) + '\n' + ins + value.slice(end);
+
+    onChange(newValue);
+    requestAnimationFrame(() => {
+      el.focus();
+      const newCursorPos = isLineEmpty ? lineStart + ins.length : end + 1 + ins.length;
+      el.setSelectionRange(newCursorPos, newCursorPos);
+    });
     setShowAdmon(false);
   };
 

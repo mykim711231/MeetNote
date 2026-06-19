@@ -16,6 +16,8 @@ interface RecorderCtx {
   addSpeaker: (name: string) => void;
   source: RecSource;
   setSource: (s: RecSource) => void;
+  folderId: string | null;
+  setFolderId: (id: string | null) => void;
 }
 
 const Ctx = createContext<RecorderCtx | null>(null);
@@ -26,6 +28,7 @@ export function RecorderProvider({ children }: { children: ReactNode }): JSX.Ele
   const [speakers, setSpeakers] = useState<string[]>(['나', '상대']);
   const [current, setCurrent] = useState('나');
   const [source, setSource] = useState<RecSource>('mic');
+  const [folderId, setFolderId] = useState<string | null>(null);
 
   const { setSpeaker } = rec;
   useEffect(() => { setSpeaker(current); }, [current, setSpeaker]);
@@ -46,7 +49,7 @@ export function RecorderProvider({ children }: { children: ReactNode }): JSX.Ele
     }
   };
 
-  const value: RecorderCtx = { rec, title, setTitle, speakers, current, setCurrent, addSpeaker, source, setSource };
+  const value: RecorderCtx = { rec, title, setTitle, speakers, current, setCurrent, addSpeaker, source, setSource, folderId, setFolderId };
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }
 

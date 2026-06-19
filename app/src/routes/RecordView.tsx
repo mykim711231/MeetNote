@@ -15,8 +15,8 @@ import LevelMeter from '@/components/LevelMeter';
 
 export default function RecordView(): JSX.Element {
   const navigate = useNavigate();
-  const saveNew = useMeetingStore((s) => s.saveNew);
-  const { rec, title, setTitle, speakers, current, setCurrent, addSpeaker, source, setSource } = useRecorderContext();
+  const { saveNew, folders } = useMeetingStore((s) => ({ saveNew: s.saveNew, folders: s.folders }));
+  const { rec, title, setTitle, speakers, current, setCurrent, addSpeaker, source, setSource, folderId, setFolderId } = useRecorderContext();
 
   const { sttLang, setSttLang } = usePrefStore();
   const [adding, setAdding] = useState(false);
@@ -80,7 +80,7 @@ export default function RecordView(): JSX.Element {
       date: new Date().toISOString(),
       duration: result.duration,
       segments: result.segments,
-      folderId: null,
+      folderId: folderId,
       hasAudio: !!result.blob,
       audioType: result.audioType,
     };
@@ -128,8 +128,8 @@ export default function RecordView(): JSX.Element {
       )}
       {rec.error && <Banner text={rec.error} />}
 
-      {/* 제목 입력 */}
-      <div className="flex-none px-5 pt-4 pb-3 border-b border-divider">
+      {/* 제목 입력 + 폴더 선택 */}
+      <div className="flex-none px-5 pt-4 pb-3 space-y-3 border-b border-divider">
         <input
           value={title}
           onChange={(e) => setTitle(e.target.value)}
@@ -137,6 +137,18 @@ export default function RecordView(): JSX.Element {
           aria-label="회의 제목"
           className="w-full bg-transparent text-fg text-xl font-bold placeholder:text-muted/40 outline-none"
         />
+        {folders.length > 0 && (
+          <select
+            value={folderId ?? ''}
+            onChange={(e) => setFolderId(e.target.value || null)}
+            className="w-full bg-surface border border-divider text-fg text-sm rounded-lg px-3 py-2 outline-none"
+          >
+            <option value="">저장할 폴더 선택 (기본: 미분류)</option>
+            {folders.map((f) => (
+              <option key={f.id} value={f.id}>{f.name}</option>
+            ))}
+          </select>
+        )}
       </div>
 
       {/* 녹음 중: 발언자 + 타이머 */}
