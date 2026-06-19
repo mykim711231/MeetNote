@@ -62,14 +62,27 @@ export function printMeeting(m: MeetingMeta): void {
   const noteHtml = m.note && m.note.trim()
     ? `<h2>메모</h2><p>${esc(m.note.trim()).replace(/\n/g, '<br>')}</p>`
     : '';
-  const summary = summarize(m.segments);
-  const todos = extractTodos(m.segments);
-  const summaryHtml = summary.length
-    ? `<h2>요약</h2><ul>${summary.map((s) => `<li>${esc(s)}</li>`).join('')}</ul>`
-    : '';
-  const todoHtml = todos.length
-    ? `<h2>할 일</h2><ul>${todos.map((t) => `<li>${esc(t.text)} (${esc(t.who)})</li>`).join('')}</ul>`
-    : '';
+  let summaryHtml = '';
+  let todoHtml = '';
+  if (m.ai) {
+    const parts: string[] = ['<h2>요약 (AI)</h2>'];
+    if (m.ai.tldr) parts.push(`<p>${esc(m.ai.tldr)}</p>`);
+    if (m.ai.keyPoints.length) parts.push(`<h3>핵심 논의</h3><ul>${m.ai.keyPoints.map((p) => `<li>${esc(p)}</li>`).join('')}</ul>`);
+    if (m.ai.decisions.length) parts.push(`<h3>결정 사항</h3><ul>${m.ai.decisions.map((d) => `<li>${esc(d)}</li>`).join('')}</ul>`);
+    summaryHtml = parts.join('');
+    todoHtml = m.ai.todos.length
+      ? `<h2>할 일</h2><ul>${m.ai.todos.map((t) => `<li>${esc(t.text)}${t.who ? ` (${esc(t.who)})` : ''}</li>`).join('')}</ul>`
+      : '';
+  } else {
+    const summary = summarize(m.segments);
+    const todos = extractTodos(m.segments);
+    summaryHtml = summary.length
+      ? `<h2>요약</h2><ul>${summary.map((s) => `<li>${esc(s)}</li>`).join('')}</ul>`
+      : '';
+    todoHtml = todos.length
+      ? `<h2>할 일</h2><ul>${todos.map((t) => `<li>${esc(t.text)} (${esc(t.who)})</li>`).join('')}</ul>`
+      : '';
+  }
   const rows = m.segments
     .map((s) => `<p><b>[${fmtTime(s.ts)}] ${esc(s.who)}:</b> ${esc(s.text)}</p>`)
     .join('');
@@ -77,7 +90,7 @@ export function printMeeting(m: MeetingMeta): void {
     w.document.write(
       `<!doctype html><html lang="ko"><head><meta charset="utf-8"><title>${esc(m.title || '회의록')}</title>` +
       `<style>body{font-family:system-ui,-apple-system,"Malgun Gothic",sans-serif;padding:28px;line-height:1.65;color:#1a1a1a;max-width:760px;margin:auto}` +
-      `h1{font-size:22px;margin:0 0 4px}h2{font-size:16px;margin:20px 0 6px}.meta{color:#666;font-size:13px;margin-bottom:16px}p{margin:5px 0}ul{margin:6px 0 0 18px}@media print{body{padding:0}}</style>` +
+      `h1{font-size:22px;margin:0 0 4px}h2{font-size:16px;margin:20px 0 6px}h3{font-size:14px;margin:12px 0 4px;color:#444}.meta{color:#666;font-size:13px;margin-bottom:16px}p{margin:5px 0}ul{margin:6px 0 0 18px}@media print{body{padding:0}}</style>` +
       `</head><body><h1>${esc(m.title || '회의록')}</h1>` +
       `<div class="meta">${fmtDate(m.date)} · ${fmtDuration(m.duration)}</div>` +
       noteHtml + summaryHtml + todoHtml + `<h2>전문</h2>${rows}</body></html>`
@@ -125,18 +138,39 @@ export function toMarkdown(m: MeetingMeta): string {
     out.push('');
   }
 
-  const summary = summarize(m.segments);
-  if (summary.length) {
-    out.push('## 요약');
-    for (const s of summary) out.push(`- ${s}`);
-    out.push('');
-  }
+  if (m.ai) {
+    // AI 요약이 있으면 우선 사용 (tldr·핵심·결정·액션아이템)
+    out.push('## 요약 (AI)');
+    if (m.ai.tldr) { out.push(mdInline(m.ai.tldr)); out.push(''); }
+    if (m.ai.keyPoints.length) {
+      out.push('### 핵심 논의');
+      for (const p of m.ai.keyPoints) out.push(`- ${mdInline(p)}`);
+      out.push('');
+    }
+    if (m.ai.decisions.length) {
+      out.push('### 결정 사항');
+      for (const d of m.ai.decisions) out.push(`- ${mdInline(d)}`);
+      out.push('');
+    }
+    if (m.ai.todos.length) {
+      out.push('## 할 일');
+      for (const t of m.ai.todos) out.push(`- [ ] ${mdInline(t.text)}${t.who ? ` _(${mdInline(t.who)})_` : ''}`);
+      out.push('');
+    }
+  } else {
+    const summary = summarize(m.segments);
+    if (summary.length) {
+      out.push('## 요약');
+      for (const s of summary) out.push(`- ${s}`);
+      out.push('');
+    }
 
-  const todos = extractTodos(m.segments);
-  if (todos.length) {
-    out.push('## 할 일');
-    for (const t of todos) out.push(`- [ ] ${t.text} _(${mdInline(t.who)})_`);
-    out.push('');
+    const todos = extractTodos(m.segments);
+    if (todos.length) {
+      out.push('## 할 일');
+      for (const t of todos) out.push(`- [ ] ${t.text} _(${mdInline(t.who)})_`);
+      out.push('');
+    }
   }
 
   out.push('## 전문');

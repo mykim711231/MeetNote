@@ -2,13 +2,15 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import {
   ArrowLeft, Play, Pause, Trash2, Download, FileText, FileCode,
-  FileJson, Music, Gauge, Pencil, Copy, Share2, Printer, Pin, Sparkles, Loader2,
+  FileJson, Music, Gauge, Pencil, Copy, Share2, Printer, Pin, Sparkles, Loader2, Link,
 } from 'lucide-react';
 import { Capacitor } from '@capacitor/core';
 import { getMeeting, getAudio } from '@/lib/db';
 import { useMeetingStore } from '@/stores/useMeetingStore';
 import { usePrefStore } from '@/stores/usePrefStore';
 import { summarize, extractTodos } from '@/lib/summarize';
+import { aiSummarize } from '@/lib/aiSummarize';
+import { shareToGist } from '@/lib/gistShare';
 import {
   downloadBlob, safeFilename, toPlainText, toMarkdown,
   copyText, shareText, canShare, printMeeting,
@@ -44,6 +46,11 @@ export default function MeetingDetail(): JSX.Element {
   const [transcribing, setTranscribing] = useState(false);
   const [transcribeMsg, setTranscribeMsg] = useState<string | null>(null);
   const sttLang = usePrefStore((s) => s.sttLang);
+  const aiProvider = usePrefStore((s) => s.aiProvider);
+  const aiKey = usePrefStore((s) => s.aiKey);
+  const assemblyAiKey = usePrefStore((s) => s.assemblyAiKey);
+  const [aiBusy, setAiBusy] = useState(false);
+  const [gistBusy, setGistBusy] = useState(false);
   const isNative = Capacitor.isNativePlatform();
 
   const mid = Number(id);
@@ -135,7 +142,14 @@ export default function MeetingDetail(): JSX.Element {
   }, [noteDraft]);
 
   const summary = useMemo(() => (meeting ? summarize(meeting.segments) : []), [meeting]);
-  const todos = useMemo(() => (meeting ? extractTodos(meeting.segments) : []), [meeting]);
+  const ruleTodos = useMemo(() => (meeting ? extractTodos(meeting.segments) : []), [meeting]);
+  // AI 요약이 있으면 그 액션아이템을 우선. ts가 없으므로 오디오 점프는 비활성.
+  const todos = useMemo(
+    () => (meeting?.ai
+      ? meeting.ai.todos.map((t) => ({ text: t.text, who: t.who ?? '', ts: -1 }))
+      : ruleTodos),
+    [meeting?.ai, ruleTodos],
+  );
   const shares = useMemo(() => (meeting ? talkShares(meeting.segments) : []), [meeting]);
 
   // 현재 재생 위치에 해당하는 세그먼트 index
@@ -238,6 +252,80 @@ export default function MeetingDetail(): JSX.Element {
     } finally {
       setTranscribing(false);
       setTranscribeMsg(null);
+    }
+  };
+
+  const onGroqTranscribe = async () => {
+    const blob = await getAudio(meeting.id);
+    if (!blob) { toast('오디오가 없습니다.', 'error'); return; }
+    if (!aiKey || aiProvider !== 'groq') { toast('설정에서 Groq 키를 먼저 등록하세요.', 'error'); return; }
+    setTranscribing(true);
+    setTranscribeMsg('Groq 전사 중…');
+    try {
+      const { transcribeWithGroq } = await import('@/lib/transcribeCloud');
+      const segs = await transcribeWithGroq(blob, meeting.audioType, sttLang, aiKey);
+      if (!segs.length) { toast('전사 결과가 비어 있어요.', 'error'); return; }
+      await mutate((m) => ({ ...m, segments: segs }));
+      setTab('transcript');
+      toast('Groq 전사를 완료했어요.', 'success');
+    } catch (e) {
+      toast(e instanceof Error ? e.message : 'Groq 전사 실패', 'error');
+    } finally {
+      setTranscribing(false);
+      setTranscribeMsg(null);
+    }
+  };
+
+  const onAssemblyAiTranscribe = async () => {
+    const blob = await getAudio(meeting.id);
+    if (!blob) { toast('오디오가 없습니다.', 'error'); return; }
+    if (!assemblyAiKey) { toast('설정에서 AssemblyAI 키를 먼저 등록하세요.', 'error'); return; }
+    setTranscribing(true);
+    setTranscribeMsg('업로드 중…');
+    try {
+      const { transcribeWithAssemblyAI } = await import('@/lib/transcribeCloud');
+      const segs = await transcribeWithAssemblyAI(blob, sttLang, assemblyAiKey, setTranscribeMsg);
+      if (!segs.length) { toast('전사 결과가 비어 있어요.', 'error'); return; }
+      await mutate((m) => ({ ...m, segments: segs }));
+      setTab('transcript');
+      toast('화자 분리 전사를 완료했어요.', 'success');
+    } catch (e) {
+      toast(e instanceof Error ? e.message : 'AssemblyAI 전사 실패', 'error');
+    } finally {
+      setTranscribing(false);
+      setTranscribeMsg(null);
+    }
+  };
+
+  const onAiSummarize = async () => {
+    if (!aiKey) { toast('설정에서 AI API 키를 먼저 등록하세요.', 'error'); return; }
+    if (meeting.segments.length === 0) { toast('전사된 내용이 없어요. 먼저 자동 전사하세요.', 'error'); return; }
+    setAiBusy(true);
+    try {
+      const ai = await aiSummarize(meeting.segments, aiProvider, aiKey);
+      await mutate((m) => ({ ...m, ai }));
+      toast('AI 요약을 생성했어요.', 'success');
+    } catch (e) {
+      toast(e instanceof Error ? e.message : 'AI 요약 실패', 'error');
+    } finally {
+      setAiBusy(false);
+    }
+  };
+
+  const onGistShare = async () => {
+    setGistBusy(true);
+    try {
+      const { url } = await shareToGist(meeting);
+      await copyText(url);
+      toast(
+        `공유 링크가 클립보드에 복사됐어요.\n${url}`,
+        'success',
+        { duration: 8000 },
+      );
+    } catch (e) {
+      toast(e instanceof Error ? e.message : '공유 링크 생성 실패', 'error');
+    } finally {
+      setGistBusy(false);
     }
   };
 
@@ -369,9 +457,10 @@ export default function MeetingDetail(): JSX.Element {
         </div>
       )}
 
-      {/* 자동 전사 (웹: 온디바이스 Whisper / iOS 네이티브: SFSpeech) */}
+      {/* 자동 전사 */}
       {meeting.hasAudio && (
-        <div className="flex-none px-4 pt-3">
+        <div className="flex-none px-4 pt-3 space-y-2">
+          {/* 온디바이스 (기본) */}
           <button
             type="button"
             onClick={onAutoTranscribe}
@@ -383,9 +472,35 @@ export default function MeetingDetail(): JSX.Element {
               : <><Sparkles size={16} /> {meeting.segments.length ? '다시 자동 전사' : '자동 전사 (받아쓰기)'}</>}
           </button>
           {!isNative && !transcribing && meeting.segments.length === 0 && (
-            <p className="text-xs text-muted mt-1.5 leading-relaxed text-center">
+            <p className="text-xs text-muted leading-relaxed text-center">
               기기 안에서 처리돼요(무료·업로드 없음). 첫 사용 시 모델을 한 번 받습니다.
             </p>
+          )}
+
+          {/* 클라우드 전사 옵션 (키 설정 시에만 노출) */}
+          {!transcribing && (aiKey && aiProvider === 'groq' || assemblyAiKey) && (
+            <div className="flex gap-2">
+              {aiKey && aiProvider === 'groq' && (
+                <button
+                  type="button"
+                  onClick={onGroqTranscribe}
+                  disabled={transcribing}
+                  className="flex-1 flex items-center justify-center gap-1.5 rounded-full border border-divider text-fg text-xs font-medium py-2 disabled:opacity-50"
+                >
+                  <Sparkles size={13} className="text-primary" /> Groq 전사
+                </button>
+              )}
+              {assemblyAiKey && (
+                <button
+                  type="button"
+                  onClick={onAssemblyAiTranscribe}
+                  disabled={transcribing}
+                  className="flex-1 flex items-center justify-center gap-1.5 rounded-full border border-divider text-fg text-xs font-medium py-2 disabled:opacity-50"
+                >
+                  <Sparkles size={13} className="text-primary" /> 화자 분리
+                </button>
+              )}
+            </div>
           )}
         </div>
       )}
@@ -479,30 +594,78 @@ export default function MeetingDetail(): JSX.Element {
         )}
 
         {tab === 'summary' && (
-          summary.length === 0
-            ? <p className="text-center text-muted text-sm pt-8">요약할 내용이 부족합니다.</p>
-            : <ul className="space-y-2">
-                {summary.map((s, i) => (
-                  <li key={i} className="flex gap-2 text-sm text-fg">
-                    <span className="text-primary font-bold flex-none">{i + 1}.</span>
-                    <span>{s}</span>
-                  </li>
-                ))}
-              </ul>
+          <div className="space-y-4">
+            {/* AI 요약 액션 (키 등록 시에만 노출) */}
+            {aiKey && meeting.segments.length > 0 && (
+              <button
+                type="button"
+                onClick={onAiSummarize}
+                disabled={aiBusy}
+                className="w-full flex items-center justify-center gap-2 rounded-full bg-primary/10 text-primary text-sm font-semibold py-2.5 disabled:opacity-60"
+              >
+                {aiBusy
+                  ? <><Loader2 size={16} className="animate-spin" /> AI 요약 생성 중…</>
+                  : <><Sparkles size={16} /> {meeting.ai ? 'AI 요약 다시 생성' : 'AI로 요약 생성'}</>}
+              </button>
+            )}
+
+            {meeting.ai ? (
+              <div className="space-y-4">
+                {meeting.ai.tldr && (
+                  <p className="text-sm text-fg leading-relaxed rounded-xl bg-primary/5 border border-primary/20 px-3 py-2">
+                    {meeting.ai.tldr}
+                  </p>
+                )}
+                {meeting.ai.keyPoints.length > 0 && (
+                  <AiBlock title="핵심 논의">
+                    {meeting.ai.keyPoints.map((p, i) => (
+                      <li key={i} className="flex gap-2 text-sm text-fg">
+                        <span className="text-primary font-bold flex-none">{i + 1}.</span><span>{p}</span>
+                      </li>
+                    ))}
+                  </AiBlock>
+                )}
+                {meeting.ai.decisions.length > 0 && (
+                  <AiBlock title="결정 사항">
+                    {meeting.ai.decisions.map((d, i) => (
+                      <li key={i} className="flex gap-2 text-sm text-fg">
+                        <span className="text-primary flex-none">✓</span><span>{d}</span>
+                      </li>
+                    ))}
+                  </AiBlock>
+                )}
+                <p className="text-[11px] text-muted">AI 생성 · {meeting.ai.model}</p>
+              </div>
+            ) : (
+              summary.length === 0
+                ? <p className="text-center text-muted text-sm pt-8">요약할 내용이 부족합니다.</p>
+                : <ul className="space-y-2">
+                    {summary.map((s, i) => (
+                      <li key={i} className="flex gap-2 text-sm text-fg">
+                        <span className="text-primary font-bold flex-none">{i + 1}.</span>
+                        <span>{s}</span>
+                      </li>
+                    ))}
+                  </ul>
+            )}
+          </div>
         )}
 
         {tab === 'todos' && (
           todos.length === 0
             ? <p className="text-center text-muted text-sm pt-8">추출된 할 일이 없습니다.</p>
             : <ul className="space-y-2">
-                {todos.map((t, i) => (
-                  <li key={i} className="flex gap-2 text-sm">
-                    <span className="flex-none w-4 h-4 mt-0.5 rounded border border-primary" />
-                    <button type="button" onClick={() => meeting.hasAudio && seekTo(t.ts)} className="text-left text-fg">
-                      {t.text} <span className="text-muted text-xs">({t.who})</span>
-                    </button>
-                  </li>
-                ))}
+                {todos.map((t, i) => {
+                  const canSeek = meeting.hasAudio && t.ts >= 0;
+                  return (
+                    <li key={i} className="flex gap-2 text-sm">
+                      <span className="flex-none w-4 h-4 mt-0.5 rounded border border-primary" />
+                      <button type="button" onClick={() => canSeek && seekTo(t.ts)} className={`text-left text-fg ${canSeek ? '' : 'cursor-default'}`}>
+                        {t.text}{t.who && <span className="text-muted text-xs"> ({t.who})</span>}
+                      </button>
+                    </li>
+                  );
+                })}
               </ul>
         )}
 
@@ -527,16 +690,26 @@ export default function MeetingDetail(): JSX.Element {
         {meeting.hasAudio && <ExportBtn onClick={exportAudio} Icon={Music} label="오디오" />}
         <ExportBtn onClick={onCopy} Icon={Copy} label="복사" />
         {canShare() && <ExportBtn onClick={onShare} Icon={Share2} label="공유" />}
+        <ExportBtn onClick={onGistShare} Icon={gistBusy ? Loader2 : Link} label="링크" disabled={gistBusy} />
         <ExportBtn onClick={onPrint} Icon={Printer} label="인쇄" />
       </div>
     </div>
   );
 }
 
-function ExportBtn({ onClick, Icon, label }: { onClick: () => void; Icon: typeof FileText; label: string }): JSX.Element {
+function AiBlock({ title, children }: { title: string; children: React.ReactNode }): JSX.Element {
   return (
-    <button type="button" onClick={onClick} className="flex-none flex items-center gap-1 text-xs font-medium text-fg border border-divider rounded-full px-3 py-1.5">
-      <Icon size={14} /> {label}
+    <div className="space-y-2">
+      <h3 className="text-xs font-bold text-muted uppercase tracking-wide">{title}</h3>
+      <ul className="space-y-1.5">{children}</ul>
+    </div>
+  );
+}
+
+function ExportBtn({ onClick, Icon, label, disabled }: { onClick: () => void; Icon: typeof FileText; label: string; disabled?: boolean }): JSX.Element {
+  return (
+    <button type="button" onClick={onClick} disabled={disabled} className="flex-none flex items-center gap-1 text-xs font-medium text-fg border border-divider rounded-full px-3 py-1.5 disabled:opacity-50">
+      <Icon size={14} className={disabled ? 'animate-spin' : ''} /> {label}
     </button>
   );
 }

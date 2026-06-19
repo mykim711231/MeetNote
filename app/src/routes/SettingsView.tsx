@@ -1,11 +1,14 @@
 import { useEffect, useRef, useState } from 'react';
 import {
   HardDrive, ShieldCheck, FolderPlus, Trash2, Download, Upload, Info, Plus, Waves,
+  Sparkles, ExternalLink, Eye, EyeOff, RefreshCw, Cloud, Copy, Check, Mic,
 } from 'lucide-react';
 import { useMeetingStore } from '@/stores/useMeetingStore';
-import { usePrefStore } from '@/stores/usePrefStore';
+import { usePrefStore, AI_PROVIDERS } from '@/stores/usePrefStore';
 import { estimateUsage, requestPersist, isPersisted, clearAllData } from '@/lib/db';
 import { buildBackup, restoreBackup, downloadBlob, buildCombinedMarkdown } from '@/lib/export';
+import { syncMeetings, testConnection, SETUP_SQL } from '@/lib/cloudSync';
+import { updateMeta } from '@/lib/db';
 import { toast } from '@/stores/useToastStore';
 import { confirmDialog } from '@/stores/useConfirmStore';
 import { fmtBytes } from '@/lib/format';
@@ -17,6 +20,22 @@ export default function SettingsView(): JSX.Element {
   const { folders, addFolder, removeFolder, meetings, load } = useMeetingStore();
   const { rec } = useRecorderContext();
   const { denoise, setDenoise } = usePrefStore();
+  const { aiProvider, aiKey, setAiProvider, setAiKey } = usePrefStore();
+  const [keyDraft, setKeyDraft] = useState(aiKey);
+  const [showKey, setShowKey] = useState(false);
+  const activeProvider = AI_PROVIDERS.find((p) => p.id === aiProvider) ?? AI_PROVIDERS[0];
+
+  const { assemblyAiKey, setAssemblyAiKey } = usePrefStore();
+  const [aaiKeyDraft, setAaiKeyDraft] = useState(assemblyAiKey);
+  const [showAaiKey, setShowAaiKey] = useState(false);
+
+  const { supabaseUrl, supabaseKey, setSupabase } = usePrefStore();
+  const [sbUrlDraft, setSbUrlDraft] = useState(supabaseUrl);
+  const [sbKeyDraft, setSbKeyDraft] = useState(supabaseKey);
+  const [showSbKey, setShowSbKey] = useState(false);
+  const [syncBusy, setSyncBusy] = useState(false);
+  const [sqlCopied, setSqlCopied] = useState(false);
+  const syncActive = supabaseUrl.length > 0 && supabaseKey.length > 0;
   const [persisted, setPersisted] = useState(false);
   const [usage, setUsage] = useState<{ usage: number; quota: number } | null>(null);
   const [newFolder, setNewFolder] = useState('');
@@ -33,6 +52,49 @@ export default function SettingsView(): JSX.Element {
     const ok = await requestPersist();
     setPersisted(ok);
     toast(ok ? '영속 저장이 활성화되었습니다.' : '브라우저가 영속 저장을 거부했습니다.', ok ? 'success' : 'error');
+  };
+
+  const onSbSave = () => {
+    setSupabase(sbUrlDraft, sbKeyDraft);
+  };
+
+  const onTestConn = async () => {
+    const url = sbUrlDraft.trim().replace(/\/$/, '');
+    const key = sbKeyDraft.trim();
+    if (!url || !key) { toast('URL과 anon 키를 모두 입력하세요.', 'error'); return; }
+    setSyncBusy(true);
+    try {
+      await testConnection(url, key);
+      setSupabase(url, key);
+      toast('연결 성공! 동기화 준비됐어요.', 'success');
+    } catch (e) {
+      toast(e instanceof Error ? e.message : '연결 실패', 'error');
+    } finally {
+      setSyncBusy(false);
+    }
+  };
+
+  const onSync = async () => {
+    if (!syncActive) { toast('설정에서 Supabase URL과 키를 먼저 등록하세요.', 'error'); return; }
+    setSyncBusy(true);
+    try {
+      const result = await syncMeetings(
+        supabaseUrl,
+        supabaseKey,
+        meetings,
+        async (meta) => { await updateMeta(meta); await load(); },
+      );
+      toast(`동기화 완료 — 업로드 ${result.pushed}건, 신규 ${result.pulled}건, 병합 ${result.merged}건`, 'success');
+    } catch (e) {
+      toast(e instanceof Error ? e.message : '동기화 실패', 'error');
+    } finally {
+      setSyncBusy(false);
+    }
+  };
+
+  const onCopySql = async () => {
+    try { await navigator.clipboard.writeText(SETUP_SQL); setSqlCopied(true); setTimeout(() => setSqlCopied(false), 2000); }
+    catch { toast('복사 실패', 'error'); }
   };
 
   const onExport = async (includeAudio: boolean) => {
@@ -158,6 +220,198 @@ export default function SettingsView(): JSX.Element {
             <span className={`absolute top-0.5 w-5 h-5 rounded-full bg-white shadow transition-all ${denoise ? 'left-[22px]' : 'left-0.5'}`} />
           </button>
         </Row>
+      </Section>
+
+      {/* STT 품질 */}
+      <Section title="전사 품질" Icon={Mic}>
+        <p className="text-xs text-muted leading-relaxed">
+          기본은 기기 안에서 처리(무료·오프라인). 클라우드를 쓰면 품질이 높아지고 <b>화자 분리</b>도 됩니다.
+          <br /><b>주의:</b> 켜면 오디오가 해당 서비스 서버로 전송됩니다.
+        </p>
+
+        {/* Groq Whisper */}
+        <div className="rounded-xl bg-surface border border-divider px-3 py-2 space-y-1">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm font-semibold text-fg">Groq Whisper</p>
+              <p className="text-xs text-muted">초고속 전사 · AI 요약 키 공유</p>
+            </div>
+            <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${aiKey ? 'bg-primary/10 text-primary' : 'bg-divider text-muted'}`}>
+              {aiKey && aiProvider === 'groq' ? '사용 가능' : '설정 필요'}
+            </span>
+          </div>
+          {(!aiKey || aiProvider !== 'groq') && (
+            <p className="text-xs text-muted">위 <b>AI 요약</b> 섹션에서 Groq를 선택하고 키를 입력하면 자동으로 활성화됩니다.</p>
+          )}
+        </div>
+
+        {/* AssemblyAI */}
+        <div className="rounded-xl bg-surface border border-divider px-3 py-2 space-y-2">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm font-semibold text-fg">AssemblyAI</p>
+              <p className="text-xs text-muted">화자 분리 포함 · 100시간/월 무료</p>
+            </div>
+            <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${assemblyAiKey ? 'bg-primary/10 text-primary' : 'bg-divider text-muted'}`}>
+              {assemblyAiKey ? '켜짐' : '꺼짐'}
+            </span>
+          </div>
+          <div className="flex items-center gap-2">
+            <input
+              type={showAaiKey ? 'text' : 'password'}
+              value={aaiKeyDraft}
+              onChange={(e) => setAaiKeyDraft(e.target.value)}
+              onBlur={() => { if (aaiKeyDraft !== assemblyAiKey) setAssemblyAiKey(aaiKeyDraft); }}
+              placeholder="AssemblyAI API 키"
+              autoComplete="off"
+              autoCorrect="off"
+              autoCapitalize="off"
+              spellCheck={false}
+              className="flex-1 bg-bg border border-divider rounded-full px-3 py-1.5 text-sm outline-none text-fg"
+            />
+            <button type="button" onClick={() => setShowAaiKey((v) => !v)} aria-label={showAaiKey ? '키 숨기기' : '키 보기'} className="w-9 h-9 grid place-items-center rounded-full border border-divider text-muted flex-none">
+              {showAaiKey ? <EyeOff size={15} /> : <Eye size={15} />}
+            </button>
+          </div>
+          <a href="https://www.assemblyai.com" target="_blank" rel="noopener noreferrer" className="flex items-center gap-1 text-xs font-medium text-primary w-fit">
+            무료 키 발급 <ExternalLink size={11} />
+          </a>
+        </div>
+      </Section>
+
+      {/* AI 요약 */}
+      <Section title="AI 요약" Icon={Sparkles}>
+        <p className="text-xs text-muted leading-relaxed">
+          무료 LLM로 회의 요약·결정사항·할 일을 자동 정리합니다.
+          API 키를 넣으면 켜지고, 비우면 기존 <b>규칙 기반 요약</b>으로 동작해요(키는 이 기기에만 저장).
+          <br /><b>주의:</b> 켜면 전사 텍스트가 선택한 제공자 서버로 전송됩니다.
+        </p>
+        <div className="flex gap-2">
+          {AI_PROVIDERS.map((p) => (
+            <button
+              key={p.id}
+              type="button"
+              onClick={() => setAiProvider(p.id)}
+              className={`flex-1 rounded-xl border px-3 py-2 text-sm font-medium transition ${aiProvider === p.id ? 'border-primary text-primary bg-primary/10' : 'border-divider text-muted'}`}
+            >
+              {p.label}
+            </button>
+          ))}
+        </div>
+        <div className="flex items-center gap-2">
+          <input
+            type={showKey ? 'text' : 'password'}
+            value={keyDraft}
+            onChange={(e) => setKeyDraft(e.target.value)}
+            onBlur={() => { if (keyDraft !== aiKey) setAiKey(keyDraft); }}
+            placeholder={`${activeProvider.label} API 키`}
+            autoComplete="off"
+            autoCorrect="off"
+            autoCapitalize="off"
+            spellCheck={false}
+            className="flex-1 bg-surface border border-divider rounded-full px-3 py-2 text-sm outline-none text-fg"
+          />
+          <button type="button" onClick={() => setShowKey((v) => !v)} aria-label={showKey ? '키 숨기기' : '키 보기'} className="w-10 h-10 grid place-items-center rounded-full border border-divider text-muted flex-none">
+            {showKey ? <EyeOff size={16} /> : <Eye size={16} />}
+          </button>
+        </div>
+        <div className="flex items-center justify-between">
+          <span className="flex items-center gap-1.5 text-xs">
+            <Sparkles size={14} className={aiKey ? 'text-primary' : 'text-muted'} />
+            <span className={aiKey ? 'text-primary font-semibold' : 'text-muted'}>{aiKey ? 'AI 요약 켜짐' : 'AI 요약 꺼짐'}</span>
+          </span>
+          <a href={activeProvider.keyUrl} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1 text-xs font-medium text-primary">
+            무료 키 발급 <ExternalLink size={12} />
+          </a>
+        </div>
+      </Section>
+
+      {/* 클라우드 동기화 */}
+      <Section title="클라우드 동기화" Icon={Cloud}>
+        <p className="text-xs text-muted leading-relaxed">
+          <b>내 Supabase 프로젝트</b>를 사용해 기기 간 동기화합니다 (무료·데이터 내 것).
+          오디오는 크기 때문에 동기화에서 제외됩니다.
+          <br /><b>주의:</b> 전사·메모가 내 Supabase 서버에 저장됩니다.
+        </p>
+
+        {/* SQL 설정 안내 */}
+        <div className="rounded-xl bg-surface border border-divider px-3 py-2 space-y-1.5">
+          <p className="text-xs font-semibold text-fg">1단계: 테이블 생성 (최초 1회)</p>
+          <p className="text-xs text-muted">Supabase 대시보드 → SQL Editor에 아래 쿼리를 붙여넣고 실행하세요.</p>
+          <div className="flex items-center justify-between gap-2">
+            <code className="text-[10px] text-muted truncate flex-1">CREATE TABLE meetings ...</code>
+            <button
+              type="button"
+              onClick={onCopySql}
+              className="flex-none flex items-center gap-1 text-xs font-medium text-primary px-2 py-1 rounded-full bg-primary/10"
+            >
+              {sqlCopied ? <><Check size={12} /> 복사됨</> : <><Copy size={12} /> SQL 복사</>}
+            </button>
+          </div>
+        </div>
+
+        {/* URL + Key 입력 */}
+        <div className="space-y-2">
+          <p className="text-xs font-semibold text-fg">2단계: 연결 정보 입력</p>
+          <input
+            type="url"
+            value={sbUrlDraft}
+            onChange={(e) => setSbUrlDraft(e.target.value)}
+            onBlur={onSbSave}
+            placeholder="https://xxxx.supabase.co"
+            autoComplete="off"
+            className="w-full bg-surface border border-divider rounded-full px-3 py-2 text-sm outline-none text-fg"
+          />
+          <div className="flex items-center gap-2">
+            <input
+              type={showSbKey ? 'text' : 'password'}
+              value={sbKeyDraft}
+              onChange={(e) => setSbKeyDraft(e.target.value)}
+              onBlur={onSbSave}
+              placeholder="anon public key"
+              autoComplete="off"
+              autoCorrect="off"
+              autoCapitalize="off"
+              spellCheck={false}
+              className="flex-1 bg-surface border border-divider rounded-full px-3 py-2 text-sm outline-none text-fg"
+            />
+            <button type="button" onClick={() => setShowSbKey((v) => !v)} aria-label={showSbKey ? '키 숨기기' : '키 보기'} className="w-10 h-10 grid place-items-center rounded-full border border-divider text-muted flex-none">
+              {showSbKey ? <EyeOff size={16} /> : <Eye size={16} />}
+            </button>
+          </div>
+        </div>
+
+        {/* 연결 테스트 + 동기화 버튼 */}
+        <div className="flex gap-2">
+          <button
+            type="button"
+            onClick={onTestConn}
+            disabled={syncBusy}
+            className="flex-1 flex items-center justify-center gap-1.5 rounded-full border border-divider text-fg text-sm font-medium py-2 disabled:opacity-50"
+          >
+            {syncBusy ? <RefreshCw size={14} className="animate-spin" /> : <Cloud size={14} />}
+            연결 테스트
+          </button>
+          <button
+            type="button"
+            onClick={onSync}
+            disabled={syncBusy || !syncActive}
+            className="flex-1 flex items-center justify-center gap-1.5 rounded-full bg-primary text-white text-sm font-semibold py-2 disabled:opacity-50"
+          >
+            {syncBusy ? <RefreshCw size={14} className="animate-spin" /> : <RefreshCw size={14} />}
+            지금 동기화
+          </button>
+        </div>
+
+        <div className="flex items-center gap-1.5 text-xs">
+          <Cloud size={13} className={syncActive ? 'text-primary' : 'text-muted'} />
+          <span className={syncActive ? 'text-primary font-semibold' : 'text-muted'}>
+            {syncActive ? '동기화 준비됨' : 'URL과 키를 입력하면 활성화'}
+          </span>
+          <a href="https://supabase.com" target="_blank" rel="noopener noreferrer" className="ml-auto flex items-center gap-1 text-primary font-medium">
+            무료 계정 만들기 <ExternalLink size={11} />
+          </a>
+        </div>
       </Section>
 
       {/* 폴더 */}
