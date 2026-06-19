@@ -37,6 +37,7 @@ interface MeetingState {
   remove: (id: number) => Promise<void>;
   addFolder: (name: string) => Folder;
   removeFolder: (id: string) => Promise<void>;
+  setFolders: (folders: Folder[]) => void;
 }
 
 export const useMeetingStore = create<MeetingState>((set, get) => ({
@@ -71,6 +72,11 @@ export const useMeetingStore = create<MeetingState>((set, get) => ({
     persistFolders(folders);
     set({ folders });
     return folder;
+  },
+
+  setFolders: (folders) => {
+    persistFolders(folders);
+    set({ folders });
   },
 
   removeFolder: async (id) => {

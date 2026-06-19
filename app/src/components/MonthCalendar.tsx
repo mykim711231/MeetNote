@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import type { MeetingMeta } from '@/types';
 
@@ -24,7 +24,9 @@ export default function MonthCalendar({
     return { y: base.getFullYear(), m: base.getMonth() };
   });
 
-  // 날짜별 회의 개수
+  // 스와이프 감지용
+  const dragRef = useRef<{ startX: number; startY: number; moved: boolean } | null>(null);
+
   const counts = useMemo(() => {
     const map = new Map<string, number>();
     for (const mt of meetings) {
@@ -51,13 +53,47 @@ export default function MonthCalendar({
     });
   };
 
+  // 포인터(터치·마우스) 스와이프 핸들러
+  const onPointerDown = (e: React.PointerEvent) => {
+    dragRef.current = { startX: e.clientX, startY: e.clientY, moved: false };
+  };
+  const onPointerMove = (e: React.PointerEvent) => {
+    if (!dragRef.current) return;
+    const dx = Math.abs(e.clientX - dragRef.current.startX);
+    const dy = Math.abs(e.clientY - dragRef.current.startY);
+    if (dx > 5 || dy > 5) dragRef.current.moved = true;
+  };
+  const onPointerUp = (e: React.PointerEvent) => {
+    if (!dragRef.current) return;
+    const dx = e.clientX - dragRef.current.startX;
+    const dy = Math.abs(e.clientY - dragRef.current.startY);
+    // 수평 이동이 40px 이상이고, 수직 이동보다 클 때만 월 이동
+    if (Math.abs(dx) > 40 && Math.abs(dx) > dy) {
+      move(dx < 0 ? 1 : -1);
+    }
+    dragRef.current = null;
+  };
+  const onPointerCancel = () => { dragRef.current = null; };
+
   return (
-    <div className="rounded-2xl bg-surface border border-divider p-3">
+    <div
+      className="rounded-2xl bg-surface border border-divider p-3 select-none"
+      onPointerDown={onPointerDown}
+      onPointerMove={onPointerMove}
+      onPointerUp={onPointerUp}
+      onPointerCancel={onPointerCancel}
+      style={{ touchAction: 'pan-y' }}
+    >
       <div className="flex items-center justify-between mb-2">
-        <button type="button" onClick={() => move(-1)} aria-label="이전 달" className="w-8 h-8 grid place-items-center text-muted"><ChevronLeft size={18} /></button>
+        <button type="button" onClick={() => move(-1)} aria-label="이전 달" className="w-8 h-8 grid place-items-center text-muted">
+          <ChevronLeft size={18} />
+        </button>
         <span className="text-sm font-bold text-fg">{view.y}년 {view.m + 1}월</span>
-        <button type="button" onClick={() => move(1)} aria-label="다음 달" className="w-8 h-8 grid place-items-center text-muted"><ChevronRight size={18} /></button>
+        <button type="button" onClick={() => move(1)} aria-label="다음 달" className="w-8 h-8 grid place-items-center text-muted">
+          <ChevronRight size={18} />
+        </button>
       </div>
+
       <div className="grid grid-cols-7 gap-1">
         {WEEKDAYS.map((w, i) => (
           <div key={w} className={`text-center text-xs py-1 ${i === 0 ? 'text-accent' : 'text-muted'}`}>{w}</div>
@@ -72,7 +108,14 @@ export default function MonthCalendar({
             <button
               key={key}
               type="button"
-              onClick={() => onSelectDay(isSel ? null : key)}
+              onPointerDown={(e) => e.stopPropagation()}
+              onPointerUp={(e) => {
+                // 스와이프 중이 아닐 때만 날짜 선택
+                if (!dragRef.current || !dragRef.current.moved) {
+                  onSelectDay(isSel ? null : key);
+                }
+                e.stopPropagation();
+              }}
               className={`aspect-square rounded-lg flex flex-col items-center justify-center text-sm relative
                 ${isSel ? 'bg-primary text-white' : count > 0 ? 'text-fg' : 'text-muted/60'}
                 ${isToday && !isSel ? 'ring-1 ring-primary' : ''}`}

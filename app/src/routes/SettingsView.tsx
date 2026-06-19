@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import {
-  HardDrive, ShieldCheck, FolderPlus, Trash2, Download, Upload, Info, Plus, Waves,
+  HardDrive, ShieldCheck, Trash2, Download, Upload, Info, Waves,
   Sparkles, ExternalLink, Eye, EyeOff, RefreshCw, Cloud, Copy, Check, Mic, ChevronDown,
 } from 'lucide-react';
 import { useMeetingStore } from '@/stores/useMeetingStore';
@@ -13,11 +13,12 @@ import { toast } from '@/stores/useToastStore';
 import { confirmDialog } from '@/stores/useConfirmStore';
 import { fmtBytes } from '@/lib/format';
 import InstallPrompt from '@/components/InstallPrompt';
+import HelpModal from '@/components/HelpModal';
 import { useRecorderContext } from '@/components/RecorderProvider';
 import type { BackupFile } from '@/types';
 
 export default function SettingsView(): JSX.Element {
-  const { folders, addFolder, removeFolder, meetings, load } = useMeetingStore();
+  const { meetings, load } = useMeetingStore();
   const { rec } = useRecorderContext();
   const { denoise, setDenoise } = usePrefStore();
   const { aiProvider, aiKey, setAiProvider, setAiKey } = usePrefStore();
@@ -39,8 +40,8 @@ export default function SettingsView(): JSX.Element {
   const [advancedOpen, setAdvancedOpen] = useState(false);
   const [persisted, setPersisted] = useState(false);
   const [usage, setUsage] = useState<{ usage: number; quota: number } | null>(null);
-  const [newFolder, setNewFolder] = useState('');
   const [busy, setBusy] = useState(false);
+  const [helpOpen, setHelpOpen] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
 
   const refreshStorage = () => {
@@ -172,6 +173,18 @@ export default function SettingsView(): JSX.Element {
 
   return (
     <div className="flex flex-col h-full overflow-y-auto px-4 py-4 space-y-6">
+      {/* 도움말 */}
+      <div className="flex items-center justify-center pt-2">
+        <button
+          type="button"
+          onClick={() => setHelpOpen(true)}
+          className="flex items-center gap-2 text-sm font-semibold text-primary px-4 py-2 rounded-full bg-primary/10 active:scale-95 transition"
+        >
+          <Info size={16} />
+          도움말 보기
+        </button>
+      </div>
+
       {/* 저장소 */}
       <Section title="저장소" Icon={HardDrive}>
         <Row>
@@ -274,7 +287,12 @@ export default function SettingsView(): JSX.Element {
             </span>
           </div>
           {(!aiKey || aiProvider !== 'groq') && (
-            <p className="text-xs text-muted">위 <b>AI 요약</b> 섹션에서 Groq를 선택하고 키를 입력하면 자동으로 활성화됩니다.</p>
+            <div className="space-y-1">
+              <p className="text-xs text-muted">위 <b>AI 요약</b> 섹션에서 Groq를 선택하고 키를 입력하면 자동으로 활성화됩니다.</p>
+              <a href="https://console.groq.com/keys" target="_blank" rel="noopener noreferrer" className="flex items-center gap-1 text-xs font-medium text-primary w-fit">
+                Groq 키 발급 <ExternalLink size={11} />
+              </a>
+            </div>
           )}
         </div>
 
@@ -451,47 +469,6 @@ export default function SettingsView(): JSX.Element {
         )}
       </section>
 
-      {/* 폴더 */}
-      <Section title="폴더" Icon={FolderPlus}>
-        <div className="flex items-center gap-2">
-          <input
-            value={newFolder}
-            onChange={(e) => setNewFolder(e.target.value)}
-            onKeyDown={(e) => { if (e.key === 'Enter' && newFolder.trim()) { addFolder(newFolder); setNewFolder(''); } }}
-            placeholder="새 폴더 이름"
-            className="flex-1 bg-surface border border-divider rounded-full px-3 py-2 text-sm outline-none text-fg"
-          />
-          <button
-            type="button"
-            onClick={() => { if (newFolder.trim()) { addFolder(newFolder); setNewFolder(''); } }}
-            aria-label="폴더 추가"
-            className="w-10 h-10 grid place-items-center rounded-full bg-primary text-white flex-none"
-          >
-            <Plus size={18} />
-          </button>
-        </div>
-        {folders.length > 0 && (
-          <ul className="space-y-1.5 mt-2">
-            {folders.map((f) => (
-              <li key={f.id} className="flex items-center justify-between rounded-xl bg-surface border border-divider px-3 py-2">
-                <span className="text-sm text-fg">{f.name}</span>
-                <button
-                  type="button"
-                  onClick={async () => {
-                    const ok = await confirmDialog({ message: `'${f.name}' 폴더를 삭제할까요?\n안의 회의록은 미분류로 이동합니다.`, confirmLabel: '삭제', danger: true });
-                    if (ok) void removeFolder(f.id);
-                  }}
-                  aria-label="폴더 삭제"
-                  className="text-muted"
-                >
-                  <Trash2 size={16} />
-                </button>
-              </li>
-            ))}
-          </ul>
-        )}
-      </Section>
-
       {/* 백업 / 복원 */}
       <Section title="백업 · 복원" Icon={Download}>
         <p className="text-xs text-muted leading-relaxed">
@@ -542,6 +519,8 @@ export default function SettingsView(): JSX.Element {
           모든 데이터 삭제
         </button>
       </section>
+
+      <HelpModal isOpen={helpOpen} onClose={() => setHelpOpen(false)} />
     </div>
   );
 }

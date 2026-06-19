@@ -21,6 +21,7 @@ import { fmtTime, fmtDate, fmtDuration } from '@/lib/format';
 import { getPlayPos, setPlayPos, clearPlayPos } from '@/lib/playpos';
 import { speakerColor, talkShares } from '@/lib/speakers';
 import type { MeetingMeta } from '@/types';
+import NoteEditor from '@/components/NoteEditor';
 
 type DetailTab = 'transcript' | 'summary' | 'todos' | 'note';
 const SPEEDS = [1, 1.25, 1.5, 2, 0.75];
@@ -701,13 +702,11 @@ export default function MeetingDetail(): JSX.Element {
         )}
 
         {tab === 'note' && (
-          <textarea
+          <NoteEditor
             value={noteDraft ?? ''}
-            onChange={(e) => setNoteDraft(e.target.value)}
-            onBlur={(e) => { void onNote(e.target.value); }}
+            onChange={setNoteDraft}
+            onBlur={() => { void onNote(noteDraft ?? ''); }}
             placeholder="이 회의에 대한 메모를 자유롭게 적어두세요…"
-            aria-label="회의 메모"
-            className="w-full min-h-[200px] bg-transparent text-fg text-sm outline-none resize-none leading-relaxed"
           />
         )}
       </div>

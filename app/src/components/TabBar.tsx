@@ -1,15 +1,16 @@
 import { NavLink } from 'react-router-dom';
-import { Mic, Library, Settings } from 'lucide-react';
+import { Mic, Library, Settings, CalendarDays } from 'lucide-react';
 
 const TABS = [
   { to: '/', label: '녹음', Icon: Mic, end: true },
   { to: '/library', label: '기록', Icon: Library, end: false },
+  { to: '/calendar', label: '달력', Icon: CalendarDays, end: false },
   { to: '/settings', label: '설정', Icon: Settings, end: false },
 ];
 
 export default function TabBar(): JSX.Element {
   return (
-    <nav className="flex-none grid grid-cols-3 border-t border-divider bg-surface pb-safe">
+    <nav className="flex-none grid grid-cols-4 border-t border-divider bg-surface pb-safe">
       {TABS.map(({ to, label, Icon, end }) => (
         <NavLink
           key={to}

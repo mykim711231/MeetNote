@@ -13,6 +13,7 @@ import RecordView from '@/routes/RecordView';
 import LibraryView from '@/routes/LibraryView';
 import SettingsView from '@/routes/SettingsView';
 import MeetingDetail from '@/routes/MeetingDetail';
+import CalendarView from '@/routes/CalendarView';
 import { Capacitor } from '@capacitor/core';
 import { useMeetingStore } from '@/stores/useMeetingStore';
 import { fmtTime } from '@/lib/format';
@@ -61,21 +62,24 @@ export default function App(): JSX.Element {
 
   return (
     <RecorderProvider>
-      <div className="h-full bg-bg text-fg">
-        <Routes>
+      <div className="h-full bg-bg text-fg flex justify-center">
+        <div className="w-full max-w-2xl flex flex-col h-full">
+          <Routes>
           <Route element={<MainLayout />}>
             <Route path="/" element={<RecordView />} />
             <Route path="/library" element={<LibraryView />} />
+            <Route path="/calendar" element={<CalendarView />} />
             <Route path="/settings" element={<SettingsView />} />
           </Route>
           <Route path="/m/:id" element={<MeetingDetail />} />
           <Route path="*" element={<Navigate to="/" replace />} />
-        </Routes>
-        <Toast />
-        <UpdateToast />
-        <ConfirmDialog />
-        <Onboarding />
-        <RecoveryPrompt />
+          </Routes>
+          <Toast />
+          <UpdateToast />
+          <ConfirmDialog />
+          <Onboarding />
+          <RecoveryPrompt />
+        </div>
       </div>
     </RecorderProvider>
   );
