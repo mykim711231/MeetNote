@@ -247,12 +247,13 @@ export default function NoteEditor({ value, onChange, onBlur, placeholder }: Pro
     if (!ref.current) return;
     const el = ref.current;
     const s = el.selectionStart;
+    const currentVal = el.value; // React state 대신 실제 textarea 값 사용
 
     // 현재 커서가 있는 라인의 끝으로 이동
-    const lineStart = value.lastIndexOf('\n', s - 1) + 1;
-    const lineEnd = value.indexOf('\n', s);
-    const actualLineEnd = lineEnd < 0 ? value.length : lineEnd;
-    const currentLine = value.slice(lineStart, actualLineEnd);
+    const lineStart = currentVal.lastIndexOf('\n', s - 1) + 1;
+    const lineEnd = currentVal.indexOf('\n', s);
+    const actualLineEnd = lineEnd < 0 ? currentVal.length : lineEnd;
+    const currentLine = currentVal.slice(lineStart, actualLineEnd);
 
     // 현재 라인이 비어있으면 그 라인에, 아니면 다음 라인에 삽입
     const isLineEmpty = !currentLine.trim();
@@ -261,10 +262,10 @@ export default function NoteEditor({ value, onChange, onBlur, placeholder }: Pro
     let newValue: string;
     if (isLineEmpty) {
       // 비어있는 라인 → 그 라인에 삽입
-      newValue = value.slice(0, lineStart) + ins + value.slice(actualLineEnd);
+      newValue = currentVal.slice(0, lineStart) + ins + currentVal.slice(actualLineEnd);
     } else {
       // 내용이 있는 라인 → 다음 라인에 삽입
-      newValue = value.slice(0, actualLineEnd) + '\n' + ins + value.slice(actualLineEnd);
+      newValue = currentVal.slice(0, actualLineEnd) + '\n' + ins + currentVal.slice(actualLineEnd);
     }
 
     onChange(newValue);
