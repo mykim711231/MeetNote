@@ -29,10 +29,23 @@ const HELP_SECTIONS: HelpSection[] = [
         <div className="space-y-2 pt-2 border-t border-divider">
           <p className="font-semibold">⚙️ 고급 옵션</p>
           <ul className="space-y-1 text-xs">
-            <li>• <strong>오디오 소스</strong>: 마이크 / 시스템 / 둘 다</li>
             <li>• <strong>언어</strong>: 한국어, 영어, 일본어 등</li>
             <li>• <strong>노이즈 감소</strong>: 주변음 필터링</li>
           </ul>
+        </div>
+        <div className="space-y-2 pt-2 border-t border-divider">
+          <p className="font-semibold">🎤 오디오 소스</p>
+          <div className="space-y-1.5 text-xs">
+            <div className="p-2 rounded bg-divider/20">
+              <p><strong>마이크 (기본)</strong><br/>일반 회의·인터뷰·강의 녹음</p>
+            </div>
+            <div className="p-2 rounded bg-divider/20">
+              <p><strong>시스템 (데스크탑만)</strong><br/>컴퓨터에서 나오는 모든 소리 (YouTube, 회의앱 오디오)</p>
+            </div>
+            <div className="p-2 rounded bg-divider/20">
+              <p><strong>둘 다 (데스크탑만)</strong><br/>마이크 + 시스템 오디오 함께 녹음</p>
+            </div>
+          </div>
         </div>
         <div className="space-y-2 pt-2 border-t border-divider">
           <p className="font-semibold">💡 팁</p>
@@ -40,6 +53,35 @@ const HELP_SECTIONS: HelpSection[] = [
             <li>• TV 뉴스: "오디오 소스 → 시스템" 선택</li>
             <li>• 일시정지했다가 계속 가능</li>
             <li>• 데스크탑 Chrome만 시스템 오디오 지원</li>
+          </ul>
+        </div>
+      </div>
+    ),
+  },
+  {
+    id: 'ios-import',
+    title: '📱 iOS 음성 메모 가져오기',
+    icon: <FileText size={20} />,
+    content: (
+      <div className="space-y-3 text-sm">
+        <p>iPhone의 음성 메모를 MeetNote로 가져옵니다.</p>
+        <div className="space-y-2">
+          <p className="font-semibold">📲 가져오기 방법</p>
+          <ol className="list-decimal list-inside space-y-2 text-xs">
+            <li>iPhone 음성 메모 앱 열기</li>
+            <li>가져올 음성 메모 선택</li>
+            <li>공유 버튼 (↗) 탭</li>
+            <li>"MeetNote" 선택</li>
+            <li>자동으로 기록에 추가됨</li>
+          </ol>
+        </div>
+        <div className="space-y-2 pt-2 border-t border-divider">
+          <p className="font-semibold">💡 팁</p>
+          <ul className="space-y-1 text-xs">
+            <li>• 첫 사용 시 "MeetNote"가 나타나지 않으면, 공유 옵션에서 찾기</li>
+            <li>• 한 번에 여러 파일 가져오기 가능</li>
+            <li>• 가져온 파일의 제목을 수정할 수 있음</li>
+            <li>• 오디오는 기기에만 저장됨 (클라우드 옵션)</li>
           </ul>
         </div>
       </div>

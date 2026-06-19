@@ -57,6 +57,29 @@ function MarkdownPreview({
   };
 
   lines.forEach((line, idx) => {
+    // Admonition (주의/팁/참고)
+    const admon = line.match(/^> \[!(NOTE|TIP|CAUTION|WARNING|INFO)\]\s+(.*)/i);
+    if (admon) {
+      flush(`pre${idx}`);
+      const type = admon[1].toUpperCase();
+      const text = admon[2];
+      const colors: Record<string, string> = {
+        NOTE: 'border-blue-400 bg-blue-50 text-blue-900',
+        TIP: 'border-green-400 bg-green-50 text-green-900',
+        CAUTION: 'border-orange-400 bg-orange-50 text-orange-900',
+        WARNING: 'border-red-400 bg-red-50 text-red-900',
+        INFO: 'border-cyan-400 bg-cyan-50 text-cyan-900',
+      };
+      const typeLabels: Record<string, string> = { NOTE: '참고', TIP: '팁', CAUTION: '주의', WARNING: '경고', INFO: '정보' };
+      nodes.push(
+        <div key={idx} className={`border-l-4 rounded px-3 py-2 my-2 text-sm ${colors[type] || colors.NOTE}`}>
+          <p className="font-semibold text-xs mb-1">{typeLabels[type]}</p>
+          <p className="leading-relaxed">{renderInline(text)}</p>
+        </div>,
+      );
+      return;
+    }
+
     // 체크리스트
     const chk = line.match(/^(\s*)([-*] \[([ xX])\] )(.*)/);
     if (chk) {
@@ -202,8 +225,16 @@ function prefixLine(
 
 // ─── 컴포넌트 ─────────────────────────────────────────────────────────────────
 
+const ADMONITIONS = [
+  { type: 'NOTE', label: '참고', icon: 'ℹ️' },
+  { type: 'TIP', label: '팁', icon: '💡' },
+  { type: 'CAUTION', label: '주의', icon: '⚠️' },
+  { type: 'WARNING', label: '경고', icon: '🚨' },
+];
+
 export default function NoteEditor({ value, onChange, onBlur, placeholder }: Props) {
   const [preview, setPreview] = useState(false);
+  const [showAdmon, setShowAdmon] = useState(false);
   const ref = useRef<HTMLTextAreaElement>(null);
 
   const wrap = (pre: string, post: string, fallback: string) => {
@@ -211,6 +242,15 @@ export default function NoteEditor({ value, onChange, onBlur, placeholder }: Pro
   };
   const prefix = (p: string) => {
     if (ref.current) prefixLine(ref.current, value, p, onChange);
+  };
+  const addAdmonition = (type: string) => {
+    if (!ref.current) return;
+    const el = ref.current;
+    const s = el.selectionStart;
+    const ins = `> [!${type}] `;
+    onChange(value.slice(0, s) + ins + value.slice(s));
+    requestAnimationFrame(() => { el.focus(); el.setSelectionRange(s + ins.length, s + ins.length); });
+    setShowAdmon(false);
   };
 
   const toggleCheck = (lineIdx: number) => {
@@ -324,6 +364,25 @@ export default function NoteEditor({ value, onChange, onBlur, placeholder }: Pro
         <TB label="인용문" onClick={() => prefix('> ')}>
           <Quote size={14} />
         </TB>
+        <div className="relative">
+          <TB label="주의/팁" onClick={() => setShowAdmon(!showAdmon)}>
+            <span className="text-xs font-bold">!</span>
+          </TB>
+          {showAdmon && (
+            <div className="absolute top-full mt-1 left-0 bg-surface border border-divider rounded-lg shadow-lg z-10 py-1 min-w-max">
+              {ADMONITIONS.map((a) => (
+                <button
+                  key={a.type}
+                  type="button"
+                  onClick={() => addAdmonition(a.type)}
+                  className="w-full px-3 py-1.5 text-sm text-left hover:bg-divider/50 text-fg flex items-center gap-2"
+                >
+                  <span>{a.icon}</span> {a.label}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
         <div className="w-px h-4 bg-divider mx-0.5" />
         <TB label="글머리" onClick={() => prefix('- ')}>
           <List size={14} />
