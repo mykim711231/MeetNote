@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import {
   HardDrive, ShieldCheck, FolderPlus, Trash2, Download, Upload, Info, Plus, Waves,
-  Sparkles, ExternalLink, Eye, EyeOff, RefreshCw, Cloud, Copy, Check, Mic,
+  Sparkles, ExternalLink, Eye, EyeOff, RefreshCw, Cloud, Copy, Check, Mic, ChevronDown,
 } from 'lucide-react';
 import { useMeetingStore } from '@/stores/useMeetingStore';
 import { usePrefStore, AI_PROVIDERS } from '@/stores/usePrefStore';
@@ -36,6 +36,7 @@ export default function SettingsView(): JSX.Element {
   const [syncBusy, setSyncBusy] = useState(false);
   const [sqlCopied, setSqlCopied] = useState(false);
   const syncActive = supabaseUrl.length > 0 && supabaseKey.length > 0;
+  const [advancedOpen, setAdvancedOpen] = useState(false);
   const [persisted, setPersisted] = useState(false);
   const [usage, setUsage] = useState<{ usage: number; quota: number } | null>(null);
   const [newFolder, setNewFolder] = useState('');
@@ -221,6 +222,38 @@ export default function SettingsView(): JSX.Element {
           </button>
         </Row>
       </Section>
+
+      {/* 고급 기능 아코디언 */}
+      <section className="space-y-2">
+        <button
+          type="button"
+          onClick={() => setAdvancedOpen((v) => !v)}
+          className="w-full flex items-center justify-between gap-2 py-1"
+        >
+          <div className="flex items-center gap-2">
+            <Sparkles size={15} className="text-muted" />
+            <span className="text-sm font-bold text-muted uppercase tracking-wide">고급 기능</span>
+            <span className="text-xs px-2 py-0.5 rounded-full bg-divider text-muted font-medium">
+              무료 · 선택
+            </span>
+          </div>
+          <div className="flex items-center gap-2">
+            {(aiKey || assemblyAiKey || syncActive) && (
+              <span className="text-xs text-primary font-semibold">
+                {[aiKey && 'AI 요약', assemblyAiKey && '화자 분리', syncActive && '동기화']
+                  .filter(Boolean)
+                  .join(' · ')}
+              </span>
+            )}
+            <ChevronDown
+              size={16}
+              className={`text-muted transition-transform duration-200 ${advancedOpen ? 'rotate-180' : ''}`}
+            />
+          </div>
+        </button>
+
+        {advancedOpen && (
+          <div className="space-y-6 pt-1 animate-in fade-in slide-in-from-top-2 duration-200">
 
       {/* STT 품질 */}
       <Section title="전사 품질" Icon={Mic}>
@@ -413,6 +446,10 @@ export default function SettingsView(): JSX.Element {
           </a>
         </div>
       </Section>
+
+          </div>
+        )}
+      </section>
 
       {/* 폴더 */}
       <Section title="폴더" Icon={FolderPlus}>

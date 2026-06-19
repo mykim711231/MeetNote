@@ -1,18 +1,35 @@
-import { useState } from 'react';
-import { Mic, Library, ShieldCheck } from 'lucide-react';
+import { useRef, useState } from 'react';
 
-const KEY = 'meetnote.onboarded.v1';
+const KEY = 'meetnote.onboarded.v2';
 
-const POINTS = [
-  { Icon: Mic, title: '녹음 + 자동 자막', desc: '말하면 실시간으로 자막이 만들어져요. (Chrome·Edge 권장)' },
-  { Icon: Library, title: '요약 · 할 일 정리', desc: '저장한 회의록에서 핵심 요약과 할 일을 자동으로 뽑아줘요.' },
-  { Icon: ShieldCheck, title: '내 기기에만 저장', desc: '서버 없이 기기 안에만 저장돼요. 중요한 건 설정에서 백업하세요.' },
-];
+const SLIDES = [
+  {
+    emoji: '🎙️',
+    title: '탭 하나로 시작합니다',
+    desc: '버튼을 누르면 바로 녹음과 자막이 시작됩니다.\n설정할 것 없이 그냥 누르면 돼요.',
+    accent: 'from-red-500/15',
+  },
+  {
+    emoji: '✨',
+    title: '끝나면 자동으로 정리됩니다',
+    desc: '핵심 요약, 결정 사항, 할 일이\n자동으로 만들어집니다.',
+    accent: 'from-purple-500/15',
+  },
+  {
+    emoji: '🔒',
+    title: '모든 기록은 이 기기에만',
+    desc: '서버·계정·비용 없이\n완전히 오프라인으로 동작합니다.',
+    accent: 'from-green-500/15',
+  },
+] as const;
 
 export default function Onboarding(): JSX.Element | null {
   const [show, setShow] = useState(() => {
     try { return !localStorage.getItem(KEY); } catch { return false; }
   });
+  const [slide, setSlide] = useState(0);
+  const touchStartX = useRef(0);
+
   if (!show) return null;
 
   const close = () => {
@@ -20,23 +37,75 @@ export default function Onboarding(): JSX.Element | null {
     setShow(false);
   };
 
+  const next = () => {
+    if (slide < SLIDES.length - 1) setSlide(slide + 1);
+    else close();
+  };
+
+  const prev = () => { if (slide > 0) setSlide(slide - 1); };
+
+  const isLast = slide === SLIDES.length - 1;
+  const { emoji, title, desc, accent } = SLIDES[slide];
+
   return (
-    <div className="fixed inset-0 z-[70] bg-black/50 flex items-center justify-center p-5" role="dialog" aria-modal="true" aria-label="시작 안내">
-      <div className="bg-surface rounded-2xl max-w-sm w-full p-6 shadow-xl">
-        <h2 className="text-xl font-bold text-fg text-center">MeetNote에 오신 걸 환영해요</h2>
-        <ul className="mt-5 space-y-4">
-          {POINTS.map(({ Icon, title, desc }) => (
-            <li key={title} className="flex gap-3">
-              <span className="flex-none w-10 h-10 rounded-full bg-primary/10 text-primary grid place-items-center"><Icon size={20} /></span>
-              <div>
-                <p className="text-sm font-semibold text-fg">{title}</p>
-                <p className="text-xs text-muted mt-0.5 leading-relaxed">{desc}</p>
-              </div>
-            </li>
+    <div
+      className={`fixed inset-0 z-[70] bg-gradient-to-b ${accent} via-bg to-bg flex flex-col select-none transition-all duration-300`}
+      onTouchStart={(e) => { touchStartX.current = e.touches[0].clientX; }}
+      onTouchEnd={(e) => {
+        const dx = e.changedTouches[0].clientX - touchStartX.current;
+        if (dx < -50) next();
+        if (dx > 50) prev();
+      }}
+      role="dialog"
+      aria-modal="true"
+      aria-label="시작 안내"
+    >
+      {/* 건너뜀 */}
+      {!isLast && (
+        <button
+          type="button"
+          onClick={close}
+          className="absolute top-5 right-5 text-sm text-muted font-medium px-3 py-1"
+        >
+          건너뜀
+        </button>
+      )}
+
+      {/* 콘텐츠 */}
+      <div className="flex-1 flex flex-col items-center justify-center px-10 text-center gap-10">
+        <div
+          className="w-32 h-32 rounded-full bg-surface flex items-center justify-center shadow-lg"
+          style={{ fontSize: '4rem' }}
+        >
+          {emoji}
+        </div>
+        <div className="space-y-4">
+          <h2 className="text-2xl font-bold text-fg leading-tight">{title}</h2>
+          <p className="text-base text-muted leading-relaxed whitespace-pre-line">{desc}</p>
+        </div>
+      </div>
+
+      {/* 하단: 점 + 버튼 */}
+      <div className="flex-none flex flex-col items-center gap-6 pb-14 px-8">
+        <div className="flex gap-2">
+          {SLIDES.map((_, i) => (
+            <button
+              key={i}
+              type="button"
+              onClick={() => setSlide(i)}
+              aria-label={`${i + 1}번 슬라이드`}
+              className={`rounded-full transition-all duration-300 ${
+                i === slide ? 'w-7 h-2.5 bg-primary' : 'w-2.5 h-2.5 bg-divider'
+              }`}
+            />
           ))}
-        </ul>
-        <button type="button" onClick={close} className="w-full mt-6 rounded-full bg-primary text-white text-sm font-semibold py-3">
-          시작하기
+        </div>
+        <button
+          type="button"
+          onClick={next}
+          className="w-full max-w-xs rounded-full bg-primary text-white text-base font-bold py-4 active:scale-95 transition-transform shadow-md"
+        >
+          {isLast ? '시작하기' : '다음'}
         </button>
       </div>
     </div>

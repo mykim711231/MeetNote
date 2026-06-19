@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import {
   ArrowLeft, Play, Pause, Trash2, Download, FileText, FileCode,
-  FileJson, Music, Gauge, Pencil, Copy, Share2, Printer, Pin, Sparkles, Loader2, Link,
+  FileJson, Music, Gauge, Pencil, Copy, Share2, Printer, Pin, Sparkles, Loader2, Link, X as XIcon,
 } from 'lucide-react';
 import { Capacitor } from '@capacitor/core';
 import { getMeeting, getAudio } from '@/lib/db';
@@ -51,6 +51,9 @@ export default function MeetingDetail(): JSX.Element {
   const assemblyAiKey = usePrefStore((s) => s.assemblyAiKey);
   const [aiBusy, setAiBusy] = useState(false);
   const [gistBusy, setGistBusy] = useState(false);
+  const [aiNudgeDismissed, setAiNudgeDismissed] = useState(() => {
+    try { return !!localStorage.getItem('meetnote.ai-nudge-dismissed'); } catch { return false; }
+  });
   const isNative = Capacitor.isNativePlatform();
 
   const mid = Number(id);
@@ -502,6 +505,34 @@ export default function MeetingDetail(): JSX.Element {
               )}
             </div>
           )}
+        </div>
+      )}
+
+      {/* AI 요약 유도 배너 — 전사 있고 AI 키 없고 아직 닫지 않았을 때 */}
+      {meeting.segments.length > 0 && !aiKey && !aiNudgeDismissed && (
+        <div className="flex-none mx-4 mt-2 flex items-center gap-2 rounded-xl bg-primary/8 border border-primary/20 px-3 py-2">
+          <Sparkles size={14} className="text-primary flex-none" />
+          <span className="flex-1 text-xs text-fg leading-relaxed">
+            AI가 요약·할 일·결정 사항을 자동으로 정리해드릴 수 있어요.
+          </span>
+          <button
+            type="button"
+            onClick={() => navigate('/settings')}
+            className="flex-none text-xs font-semibold text-primary whitespace-nowrap"
+          >
+            설정 →
+          </button>
+          <button
+            type="button"
+            aria-label="닫기"
+            onClick={() => {
+              try { localStorage.setItem('meetnote.ai-nudge-dismissed', '1'); } catch { /* noop */ }
+              setAiNudgeDismissed(true);
+            }}
+            className="flex-none text-muted"
+          >
+            <XIcon size={14} />
+          </button>
         </div>
       )}
 
