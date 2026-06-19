@@ -177,9 +177,13 @@ function MarkdownPreview({
 
 // ─── 편집 헬퍼 ───────────────────────────────────────────────────────────────
 
+// setRangeText로 [start,end] 범위만 정확히 교체한다. 네이티브 API라
+// 커서가 자동 처리되고, onChange(el.value)로 React state를 DOM과 일치시키면
+// 리렌더 시 value===el.value 이므로 React가 커서를 건드리지 않는다.
+// → "다른 곳 삽입 / 아래 내용 삭제" 경합 조건이 원천 제거됨.
+
 function wrapSelection(
   el: HTMLTextAreaElement,
-  value: string,
   pre: string,
   post: string,
   fallback: string,
@@ -187,40 +191,38 @@ function wrapSelection(
 ) {
   const s = el.selectionStart;
   const e = el.selectionEnd;
-  const sel = value.slice(s, e) || fallback;
-  const next = value.slice(0, s) + pre + sel + post + value.slice(e);
-  onChange(next);
-  requestAnimationFrame(() => {
-    el.focus();
-    el.setSelectionRange(s + pre.length, s + pre.length + sel.length);
-  });
+  const sel = el.value.slice(s, e) || fallback;
+  el.focus();
+  el.setRangeText(pre + sel + post, s, e, 'end');
+  // 안쪽 텍스트(placeholder)를 선택해 바로 덮어쓸 수 있게 한다
+  el.setSelectionRange(s + pre.length, s + pre.length + sel.length);
+  onChange(el.value);
 }
 
 function prefixLine(
   el: HTMLTextAreaElement,
-  value: string,
   prefix: string,
   onChange: (v: string) => void,
 ) {
+  const v = el.value;
   const s = el.selectionStart;
-  const lineStart = value.lastIndexOf('\n', s - 1) + 1;
-  const lineEnd = value.indexOf('\n', s);
-  const end = lineEnd < 0 ? value.length : lineEnd;
-  const line = value.slice(lineStart, end);
+  const lineStart = v.lastIndexOf('\n', s - 1) + 1;
+  const lineEnd = v.indexOf('\n', s);
+  const end = lineEnd < 0 ? v.length : lineEnd;
+  const line = v.slice(lineStart, end);
 
-  let next: string;
-  let cur: number;
-
+  el.focus();
   if (line.startsWith(prefix)) {
-    next = value.slice(0, lineStart) + line.slice(prefix.length) + value.slice(end);
-    cur = Math.max(lineStart, s - prefix.length);
+    // 토글: 접두사 제거
+    el.setRangeText('', lineStart, lineStart + prefix.length, 'end');
+    const cur = Math.max(lineStart, s - prefix.length);
+    el.setSelectionRange(cur, cur);
   } else {
-    next = value.slice(0, lineStart) + prefix + line + value.slice(end);
-    cur = s + prefix.length;
+    el.setRangeText(prefix, lineStart, lineStart, 'end');
+    const cur = s + prefix.length;
+    el.setSelectionRange(cur, cur);
   }
-
-  onChange(next);
-  requestAnimationFrame(() => { el.focus(); el.setSelectionRange(cur, cur); });
+  onChange(el.value);
 }
 
 // ─── 컴포넌트 ─────────────────────────────────────────────────────────────────
@@ -238,42 +240,33 @@ export default function NoteEditor({ value, onChange, onBlur, placeholder }: Pro
   const ref = useRef<HTMLTextAreaElement>(null);
 
   const wrap = (pre: string, post: string, fallback: string) => {
-    if (ref.current) wrapSelection(ref.current, value, pre, post, fallback, onChange);
+    if (ref.current) wrapSelection(ref.current, pre, post, fallback, onChange);
   };
   const prefix = (p: string) => {
-    if (ref.current) prefixLine(ref.current, value, p, onChange);
+    if (ref.current) prefixLine(ref.current, p, onChange);
   };
   const addAdmonition = (type: string) => {
-    if (!ref.current) return;
     const el = ref.current;
+    if (!el) return;
+    const v = el.value;
     const s = el.selectionStart;
-    const currentVal = el.value; // React state 대신 실제 textarea 값 사용
 
-    // 현재 커서가 있는 라인의 끝으로 이동
-    const lineStart = currentVal.lastIndexOf('\n', s - 1) + 1;
-    const lineEnd = currentVal.indexOf('\n', s);
-    const actualLineEnd = lineEnd < 0 ? currentVal.length : lineEnd;
-    const currentLine = currentVal.slice(lineStart, actualLineEnd);
-
-    // 현재 라인이 비어있으면 그 라인에, 아니면 다음 라인에 삽입
-    const isLineEmpty = !currentLine.trim();
+    // 현재 커서가 있는 라인의 범위
+    const lineStart = v.lastIndexOf('\n', s - 1) + 1;
+    const lineEnd = v.indexOf('\n', s);
+    const end = lineEnd < 0 ? v.length : lineEnd;
+    const line = v.slice(lineStart, end);
     const ins = `> [!${type}] `;
 
-    let newValue: string;
-    if (isLineEmpty) {
-      // 비어있는 라인 → 그 라인에 삽입
-      newValue = currentVal.slice(0, lineStart) + ins + currentVal.slice(actualLineEnd);
+    el.focus();
+    if (!line.trim()) {
+      // 빈 줄 → 그 줄을 그대로 교체
+      el.setRangeText(ins, lineStart, end, 'end');
     } else {
-      // 내용이 있는 라인 → 다음 라인에 삽입
-      newValue = currentVal.slice(0, actualLineEnd) + '\n' + ins + currentVal.slice(actualLineEnd);
+      // 내용 있는 줄 → 줄 끝에 새 줄로 삽입 (아래 내용은 그대로 보존)
+      el.setRangeText('\n' + ins, end, end, 'end');
     }
-
-    onChange(newValue);
-    requestAnimationFrame(() => {
-      el.focus();
-      const newCursorPos = isLineEmpty ? lineStart + ins.length : actualLineEnd + 1 + ins.length;
-      el.setSelectionRange(newCursorPos, newCursorPos);
-    });
+    onChange(el.value);
     setShowAdmon(false);
   };
 
@@ -291,23 +284,26 @@ export default function NoteEditor({ value, onChange, onBlur, placeholder }: Pro
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     const el = e.currentTarget;
 
+    const v = el.value;
+
     // Tab: 들여쓰기 / 내어쓰기
     if (e.key === 'Tab') {
       e.preventDefault();
       const s = el.selectionStart;
-      const lineStart = value.lastIndexOf('\n', s - 1) + 1;
-      const lineEnd = value.indexOf('\n', s);
-      const end = lineEnd < 0 ? value.length : lineEnd;
-      const line = value.slice(lineStart, end);
+      const lineStart = v.lastIndexOf('\n', s - 1) + 1;
+      const line = v.slice(lineStart, v.indexOf('\n', s) < 0 ? v.length : v.indexOf('\n', s));
 
       if (e.shiftKey) {
         if (line.startsWith('  ')) {
-          onChange(value.slice(0, lineStart) + line.slice(2) + value.slice(end));
-          requestAnimationFrame(() => el.setSelectionRange(Math.max(lineStart, s - 2), Math.max(lineStart, s - 2)));
+          el.setRangeText('', lineStart, lineStart + 2, 'end');
+          const cur = Math.max(lineStart, s - 2);
+          el.setSelectionRange(cur, cur);
+          onChange(el.value);
         }
       } else {
-        onChange(value.slice(0, lineStart) + '  ' + line + value.slice(end));
-        requestAnimationFrame(() => el.setSelectionRange(s + 2, s + 2));
+        el.setRangeText('  ', lineStart, lineStart, 'end');
+        el.setSelectionRange(s + 2, s + 2);
+        onChange(el.value);
       }
       return;
     }
@@ -315,16 +311,15 @@ export default function NoteEditor({ value, onChange, onBlur, placeholder }: Pro
     // Enter: 목록 자동 계속
     if (e.key === 'Enter') {
       const s = el.selectionStart;
-      const lineStart = value.lastIndexOf('\n', s - 1) + 1;
-      const line = value.slice(lineStart, s);
+      const lineStart = v.lastIndexOf('\n', s - 1) + 1;
+      const line = v.slice(lineStart, s);
 
       // 빈 목록 줄 → 목록 종료
       if (/^(\s*)([-*] \[[ x]\] |[-*+] |\d+\. )$/.test(line)) {
         e.preventDefault();
-        const prefixLen = line.length;
-        const next = value.slice(0, lineStart) + '\n' + value.slice(lineStart + prefixLen);
-        onChange(next);
-        requestAnimationFrame(() => el.setSelectionRange(lineStart + 1, lineStart + 1));
+        el.setRangeText('\n', lineStart, lineStart + line.length, 'end');
+        el.setSelectionRange(lineStart + 1, lineStart + 1);
+        onChange(el.value);
         return;
       }
 
@@ -332,9 +327,8 @@ export default function NoteEditor({ value, onChange, onBlur, placeholder }: Pro
       const chk = line.match(/^(\s*)([-*] \[[ x]\] )(.*)/);
       if (chk && chk[3].trim()) {
         e.preventDefault();
-        const ins = '\n' + chk[1] + '- [ ] ';
-        onChange(value.slice(0, s) + ins + value.slice(s));
-        requestAnimationFrame(() => el.setSelectionRange(s + ins.length, s + ins.length));
+        el.setRangeText('\n' + chk[1] + '- [ ] ', s, s, 'end');
+        onChange(el.value);
         return;
       }
 
@@ -342,9 +336,8 @@ export default function NoteEditor({ value, onChange, onBlur, placeholder }: Pro
       const ul = line.match(/^(\s*)([-*+] )(.*)/);
       if (ul && ul[3].trim()) {
         e.preventDefault();
-        const ins = '\n' + ul[1] + ul[2];
-        onChange(value.slice(0, s) + ins + value.slice(s));
-        requestAnimationFrame(() => el.setSelectionRange(s + ins.length, s + ins.length));
+        el.setRangeText('\n' + ul[1] + ul[2], s, s, 'end');
+        onChange(el.value);
         return;
       }
 
@@ -352,9 +345,8 @@ export default function NoteEditor({ value, onChange, onBlur, placeholder }: Pro
       const ol = line.match(/^(\s*)(\d+)\. (.*)/);
       if (ol && ol[3].trim()) {
         e.preventDefault();
-        const ins = '\n' + ol[1] + (parseInt(ol[2]) + 1) + '. ';
-        onChange(value.slice(0, s) + ins + value.slice(s));
-        requestAnimationFrame(() => el.setSelectionRange(s + ins.length, s + ins.length));
+        el.setRangeText('\n' + ol[1] + (parseInt(ol[2]) + 1) + '. ', s, s, 'end');
+        onChange(el.value);
         return;
       }
     }
@@ -398,6 +390,7 @@ export default function NoteEditor({ value, onChange, onBlur, placeholder }: Pro
                 <button
                   key={a.type}
                   type="button"
+                  onMouseDown={(e) => e.preventDefault()}
                   onClick={() => addAdmonition(a.type)}
                   className="w-full px-3 py-1.5 text-sm text-left hover:bg-divider/50 text-fg flex items-center gap-2"
                 >
@@ -420,10 +413,9 @@ export default function NoteEditor({ value, onChange, onBlur, placeholder }: Pro
         <TB label="구분선" onClick={() => {
           const el = ref.current;
           if (!el) return;
-          const s = el.selectionStart;
-          const ins = '\n---\n';
-          onChange(value.slice(0, s) + ins + value.slice(s));
-          requestAnimationFrame(() => { el.focus(); el.setSelectionRange(s + ins.length, s + ins.length); });
+          el.focus();
+          el.setRangeText('\n---\n', el.selectionStart, el.selectionEnd, 'end');
+          onChange(el.value);
         }}>
           <Minus size={14} />
         </TB>
@@ -482,6 +474,10 @@ function TB({
       type="button"
       aria-label={label}
       title={label}
+      // mousedown/touch 시 기본동작(포커스 이동)을 막아 textarea의 커서·선택을 유지한다.
+      // 이것이 없으면 버튼 클릭 시 textarea가 blur 되어 selectionStart가 0으로 풀려
+      // "엉뚱한 곳(맨 위)에 삽입"되는 버그가 발생한다.
+      onMouseDown={(e) => e.preventDefault()}
       onClick={onClick}
       className="w-8 h-8 flex items-center justify-center rounded-lg text-muted hover:text-fg hover:bg-divider/50 active:bg-divider transition"
     >
