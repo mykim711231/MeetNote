@@ -109,15 +109,18 @@ export default function RecordView(): JSX.Element {
       {/* 경고 배너 */}
       {!window.isSecureContext && <Banner text="HTTPS(또는 localhost)에서만 녹음할 수 있습니다." />}
       {isIOS && !busy && (
-        <div className="flex-none flex items-start gap-2 px-4 py-2 text-xs bg-primary/10 text-primary">
-          <AlertTriangle size={14} className="flex-none mt-0.5" />
-          <span>
-            아이폰은 실시간 자막이 안 돼요.{' '}
+        <div className="flex-none px-4 py-3 text-xs bg-primary/10 text-primary space-y-1.5">
+          <p className="font-semibold">아이폰은 실시간 자막을 지원하지 않아요. 두 가지 방법으로 녹음을 가져올 수 있어요.</p>
+          <p>
+            <b>방법 1 (쉬움)</b> — 음성 메모 앱에서 녹음 후 <b>공유 → MeetNote</b>
+            <span className="ml-1 opacity-70">(앱 설치 필요)</span>
+          </p>
+          <p>
+            <b>방법 2</b> — 음성 메모 앱 → <b>···  → 파일에 저장</b> → 그 다음{' '}
             <button type="button" onClick={() => navigate('/library')} className="underline font-semibold">
-              기록 → 가져오기
+              기록 탭 → 파일 업로드
             </button>
-            로 불러오세요.
-          </span>
+          </p>
         </div>
       )}
       {window.isSecureContext && !rec.sttSupported && !isIOS && (

@@ -16,9 +16,12 @@ export default defineConfig(({ command }) => {
   plugins: [
     react(),
     VitePWA({
+      strategies: 'injectManifest',
+      srcDir: 'src',
+      filename: 'sw.ts',
       registerType: 'prompt',
       manifest: {
-        id: '/MeetNote/', // 배포 타깃(base)과 무관하게 고정 — 동일 앱으로 인식
+        id: '/MeetNote/',
         name: 'MeetNote 회의록',
         short_name: 'MeetNote',
         description: '개인용 무료 로컬 회의록 녹음기',
@@ -36,13 +39,24 @@ export default defineConfig(({ command }) => {
           { src: 'icons/icon-512.png', sizes: '512x512', type: 'image/png', purpose: 'maskable' },
           { src: 'icons/icon.svg', sizes: 'any', type: 'image/svg+xml' },
         ],
+        // Web Share Target: iOS 음성 메모 → 공유 → MeetNote
+        share_target: {
+          action: 'share-target',
+          method: 'POST',
+          enctype: 'multipart/form-data',
+          params: {
+            files: [
+              {
+                name: 'file',
+                accept: ['audio/*', '.m4a', '.mp3', '.aac', '.wav', '.mp4', '.ogg', '.opus'],
+              },
+            ],
+          },
+        },
       },
-      workbox: {
+      injectManifest: {
         globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2}'],
-        // Whisper(transformers.js) 청크/모델은 프리캐시 제외 — 무겁고 첫 사용 시에만 로드
         globIgnores: ['**/transformers*', '**/whisper*', '**/ort*', '**/*.wasm'],
-        navigateFallback: `${base}index.html`,
-        navigateFallbackDenylist: [/^\/(api|_)\//],
         maximumFileSizeToCacheInBytes: 4 * 1024 * 1024,
       },
     }),

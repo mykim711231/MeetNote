@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { Search, Mic, ChevronRight, FolderOpen, Pin, Upload, FileText, List, CalendarDays } from 'lucide-react';
 import { useMeetingStore } from '@/stores/useMeetingStore';
 import { fmtDate, fmtDuration } from '@/lib/format';
@@ -38,6 +38,7 @@ function snippet(m: MeetingMeta, q: string): string {
 
 export default function LibraryView(): JSX.Element {
   const navigate = useNavigate();
+  const { search } = useLocation();
   const { meetings, folders, loaded, load, saveNew } = useMeetingStore();
   const [q, setQ] = useState('');
   const [folderId, setFolderId] = useState<string | 'all'>('all');
@@ -49,6 +50,29 @@ export default function LibraryView(): JSX.Element {
   const fileRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => { if (!loaded) void load(); }, [loaded, load]);
+
+  // Web Share Target: 서비스워커가 /share-target POST를 받아 Cache에 저장 → ?share=1로 리다이렉트
+  useEffect(() => {
+    if (!search.includes('share')) return;
+    const run = async () => {
+      try {
+        const cache = await caches.open('meetnote-share-v1');
+        const response = await cache.match('pending');
+        if (!response) return;
+        await cache.delete('pending');
+        const blob = await response.blob();
+        const name = decodeURIComponent(response.headers.get('X-Filename') || 'recording.m4a');
+        const file = new File([blob], name, { type: blob.type || 'audio/mp4' });
+        await onImport(file);
+      } catch {
+        toast('공유 파일 가져오기에 실패했어요.', 'error');
+      }
+      navigate('/library', { replace: true });
+    };
+    void run();
+  // onImport는 함수라 의존성에서 제외
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [search]);
 
   const onImport = async (file: File) => {
     if (!file.type.startsWith('audio') && !/\.(mp3|m4a|aac|wav|ogg|opus|webm|flac|amr|3gp|mp4)$/i.test(file.name)) {
@@ -135,7 +159,7 @@ export default function LibraryView(): JSX.Element {
       <input
         ref={fileRef}
         type="file"
-        accept="audio/*"
+        accept="audio/*,.m4a,.mp3,.aac,.wav,.mp4,.ogg,.opus,.webm,.flac"
         className="hidden"
         onChange={(e) => { const f = e.target.files?.[0]; if (f) void onImport(f); }}
       />
