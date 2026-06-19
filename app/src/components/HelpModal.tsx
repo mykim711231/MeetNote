@@ -128,29 +128,52 @@ const HELP_SECTIONS: HelpSection[] = [
     icon: <FileText size={20} />,
     content: (
       <div className="space-y-3 text-sm">
-        <p>마크다운 형식으로 노트를 작성합니다.</p>
+        <p>툴바 버튼으로 손쉽게 서식을 넣을 수 있습니다. 글자를 선택한 뒤 버튼을 누르면 선택 영역에 적용되고, 선택 없이 누르면 예시 글자가 들어갑니다.</p>
+
         <div className="space-y-2">
-          <p className="font-semibold">기본 서식</p>
+          <p className="font-semibold">글자 꾸미기</p>
           <div className="space-y-1 text-xs bg-divider/30 p-2 rounded">
-            <p><strong>H</strong> → <code># 제목</code></p>
-            <p><strong>B</strong> → <code>**굵은 글자**</code></p>
-            <p><strong>I</strong> → <code>_기울임_</code></p>
+            <p><strong>H</strong> 제목 → <code># 제목</code></p>
+            <p><strong>B</strong> 굵게 → <code>**굵은 글자**</code></p>
+            <p><strong>I</strong> 기울임 → <code>_기울임_</code></p>
+            <p><strong>U</strong> 밑줄 → <code>__밑줄__</code></p>
+            <p><strong>S</strong> 취소선 → <code>~~취소선~~</code></p>
+            <p><strong>🔗</strong> 링크 → <code>[링크](url)</code></p>
+            <p><strong>{'</>'}</strong> 코드 → <code>`코드`</code></p>
+            <p><strong>"</strong> 인용문 → <code>&gt; 인용</code></p>
+            <p><strong>—</strong> 구분선 → <code>---</code> (가로줄)</p>
           </div>
+          <p className="text-xs text-muted">같은 버튼을 다시 누르면 제목·인용·목록 서식은 해제됩니다(토글).</p>
         </div>
+
         <div className="space-y-2">
           <p className="font-semibold">목록</p>
           <div className="space-y-1 text-xs">
             <p>• 글머리: <code>- 항목</code> + Enter</p>
             <p>• 번호: <code>1. 항목</code> + Enter (자동 증가)</p>
-            <p>• 체크: <code>- [ ] 할 일</code> (미리보기에서 클릭 가능)</p>
+            <p>• 체크: <code>- [ ] 할 일</code> (미리보기에서 클릭 체크)</p>
           </div>
         </div>
+
+        <div className="space-y-2 pt-2 border-t border-divider">
+          <p className="font-semibold">⚠️ 강조 박스 (! 버튼)</p>
+          <p className="text-xs text-muted">! 버튼을 누르면 4가지 색상 박스를 고를 수 있습니다. 항상 새 줄에 삽입돼요.</p>
+          <div className="space-y-1.5 text-xs">
+            <div className="px-2 py-1.5 rounded border-l-4 border-blue-400 bg-blue-50 text-blue-900">ℹ️ <strong>참고</strong> — 부가 정보</div>
+            <div className="px-2 py-1.5 rounded border-l-4 border-green-400 bg-green-50 text-green-900">💡 <strong>팁</strong> — 유용한 요령</div>
+            <div className="px-2 py-1.5 rounded border-l-4 border-orange-400 bg-orange-50 text-orange-900">⚠️ <strong>주의</strong> — 조심할 점</div>
+            <div className="px-2 py-1.5 rounded border-l-4 border-red-400 bg-red-50 text-red-900">🚨 <strong>경고</strong> — 중요 경고</div>
+          </div>
+        </div>
+
         <div className="pt-2 border-t border-divider">
           <p className="font-semibold text-xs mb-2">💡 자동 기능</p>
           <ul className="text-xs space-y-1">
-            <li>• Enter: 목록 자동 계속</li>
-            <li>• Tab/Shift+Tab: 들여쓰기</li>
-            <li>• 미리보기: 최종 모습 확인</li>
+            <li>• Enter: 목록·번호·체크 자동 계속 (번호는 자동 증가)</li>
+            <li>• 빈 목록 줄에서 Enter: 목록 종료</li>
+            <li>• Tab / Shift+Tab: 들여쓰기 / 내어쓰기</li>
+            <li>• 👁 미리보기: 서식이 적용된 최종 모습 확인</li>
+            <li>• 삽입은 항상 커서 위치에 — 다른 곳으로 튀지 않아요</li>
           </ul>
         </div>
       </div>
@@ -203,7 +226,7 @@ const HELP_SECTIONS: HelpSection[] = [
             <li>• "모든 노트": 전체 회의록</li>
             <li>• 폴더: 프로젝트/주제별로 그룹화</li>
             <li>• "+ 새 폴더": 폴더 생성</li>
-            <li>• "순서 편집": ↑↓로 폴더 순서 변경</li>
+            <li>• "순서 편집": ⠿ 손잡이를 드래그해 폴더 순서 변경</li>
           </ul>
         </div>
         <div className="space-y-2 pt-2 border-t border-divider">
