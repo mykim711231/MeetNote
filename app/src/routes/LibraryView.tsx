@@ -53,6 +53,7 @@ export default function LibraryView(): JSX.Element {
   const [newFolderName, setNewFolderName] = useState('');
   const [addingFolder, setAddingFolder] = useState(false);
   const [editingFolders, setEditingFolders] = useState(false);
+  const [draggedFolderIdx, setDraggedFolderIdx] = useState<number | null>(null);
   const newFolderRef = useRef<HTMLInputElement>(null);
 
   const [q, setQ] = useState('');
@@ -64,6 +65,7 @@ export default function LibraryView(): JSX.Element {
   const [showTpl, setShowTpl] = useState(false);
   const [orderedTpls, setOrderedTpls] = useState<NoteTemplate[]>(() => loadTemplateOrder());
   const [editingTpls, setEditingTpls] = useState(false);
+  const [draggedTplIdx, setDraggedTplIdx] = useState<number | null>(null);
 
   const fileRef = useRef<HTMLInputElement>(null);
 
@@ -165,6 +167,19 @@ export default function LibraryView(): JSX.Element {
     setFolders(next);
   };
 
+  const onFolderDragStart = (idx: number) => {
+    setDraggedFolderIdx(idx);
+  };
+
+  const onFolderDrop = (targetIdx: number) => {
+    if (draggedFolderIdx === null || draggedFolderIdx === targetIdx) return;
+    const next = [...folders];
+    const [item] = next.splice(draggedFolderIdx, 1);
+    next.splice(targetIdx, 0, item);
+    setFolders(next);
+    setDraggedFolderIdx(null);
+  };
+
   const onDeleteFolder = async (id: string) => {
     const count = meetings.filter((m) => m.folderId === id).length;
     if (count > 0 && !window.confirm(`이 폴더의 노트 ${count}개가 '미분류'로 이동됩니다. 계속할까요?`)) return;
@@ -180,6 +195,20 @@ export default function LibraryView(): JSX.Element {
     [next[idx], next[target]] = [next[target], next[idx]];
     setOrderedTpls(next);
     saveTemplateOrder(next);
+  };
+
+  const onTplDragStart = (idx: number) => {
+    setDraggedTplIdx(idx);
+  };
+
+  const onTplDrop = (targetIdx: number) => {
+    if (draggedTplIdx === null || draggedTplIdx === targetIdx) return;
+    const next = [...orderedTpls];
+    const [item] = next.splice(draggedTplIdx, 1);
+    next.splice(targetIdx, 0, item);
+    setOrderedTpls(next);
+    saveTemplateOrder(next);
+    setDraggedTplIdx(null);
   };
 
   const needle = q.trim();
@@ -251,12 +280,25 @@ export default function LibraryView(): JSX.Element {
           {folders.map((f, idx) => {
             const count = meetings.filter((m) => m.folderId === f.id).length;
             return (
-              <div key={f.id} className="flex items-center border-b border-divider">
+              <div
+                key={f.id}
+                draggable={editingFolders}
+                onDragStart={() => onFolderDragStart(idx)}
+                onDragOver={(e) => e.preventDefault()}
+                onDrop={() => onFolderDrop(idx)}
+                className={`flex items-center border-b border-divider transition ${
+                  editingFolders && draggedFolderIdx === idx ? 'bg-primary/10' : ''
+                } ${editingFolders ? 'cursor-grab active:cursor-grabbing' : ''}`}
+              >
                 <button
                   type="button"
                   onClick={() => { if (!editingFolders) setFolderView(f.id); }}
                   className="flex-1 flex items-center gap-3 px-4 py-3.5 active:bg-divider/30 transition"
+                  draggable={false}
                 >
+                  {editingFolders && (
+                    <GripVertical size={18} className="text-muted flex-none" />
+                  )}
                   <div className="w-11 h-11 rounded-2xl bg-surface border border-divider grid place-items-center flex-none">
                     <Folder size={22} className="text-muted" />
                   </div>
@@ -264,28 +306,7 @@ export default function LibraryView(): JSX.Element {
                   {!editingFolders && <span className="text-muted text-sm">{count}</span>}
                   {!editingFolders && <ChevronRight size={16} className="text-muted flex-none" />}
                 </button>
-                {editingFolders ? (
-                  <div className="flex flex-col pr-2">
-                    <button
-                      type="button"
-                      aria-label="위로"
-                      onClick={() => moveFolder(idx, -1)}
-                      disabled={idx === 0}
-                      className="p-1.5 text-muted disabled:opacity-25"
-                    >
-                      <ArrowUp size={16} />
-                    </button>
-                    <button
-                      type="button"
-                      aria-label="아래로"
-                      onClick={() => moveFolder(idx, 1)}
-                      disabled={idx === folders.length - 1}
-                      className="p-1.5 text-muted disabled:opacity-25"
-                    >
-                      <ArrowDown size={16} />
-                    </button>
-                  </div>
-                ) : (
+                {!editingFolders && (
                   <button
                     type="button"
                     aria-label={`${f.name} 폴더 삭제`}
@@ -495,7 +516,13 @@ export default function LibraryView(): JSX.Element {
               {orderedTpls.map((t, idx) => (
                 <div
                   key={t.id}
-                  className="flex items-center gap-2 rounded-xl border border-divider overflow-hidden"
+                  draggable={editingTpls}
+                  onDragStart={() => onTplDragStart(idx)}
+                  onDragOver={(e) => e.preventDefault()}
+                  onDrop={() => onTplDrop(idx)}
+                  className={`flex items-center gap-2 rounded-xl border border-divider overflow-hidden transition ${
+                    editingTpls && draggedTplIdx === idx ? 'bg-primary/10 border-primary' : ''
+                  } ${editingTpls ? 'cursor-grab active:cursor-grabbing' : ''}`}
                 >
                   {editingTpls ? (
                     <>
@@ -504,32 +531,13 @@ export default function LibraryView(): JSX.Element {
                         <div className="text-sm font-semibold text-fg">{t.label}</div>
                         <div className="text-xs text-muted">{t.desc}</div>
                       </div>
-                      <div className="flex flex-col gap-0.5 pr-2">
-                        <button
-                          type="button"
-                          aria-label="위로"
-                          onClick={() => moveTpl(idx, -1)}
-                          disabled={idx === 0}
-                          className="p-1 text-muted disabled:opacity-30"
-                        >
-                          <ArrowUp size={14} />
-                        </button>
-                        <button
-                          type="button"
-                          aria-label="아래로"
-                          onClick={() => moveTpl(idx, 1)}
-                          disabled={idx === orderedTpls.length - 1}
-                          className="p-1 text-muted disabled:opacity-30"
-                        >
-                          <ArrowDown size={14} />
-                        </button>
-                      </div>
                     </>
                   ) : (
                     <button
                       type="button"
                       onClick={() => void onNewNote(t)}
                       className="flex-1 flex items-center justify-between px-4 py-3 active:scale-[0.99] transition"
+                      draggable={false}
                     >
                       <div>
                         <div className="text-sm font-semibold text-fg text-left">{t.label}</div>
